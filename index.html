@@ -1104,90 +1104,90 @@ function setMePeriodo(val) {
 
 // ── TAB: BEP ─────────────────────────────────────────────────
 function buildBEP() {
-  // Legge i dati dal foglio Costi_BEP
-  // Struttura: col A = voce, col B = importo
   const raw = DATA.costiBEP;
+  if (!raw || raw.length === 0) {
+    return '<div class="state-msg">Nessun dato nel foglio Costi_BEP</div>';
+  }
 
-  // Estrai valori per nome voce
-  function getVal(label) {
+  // Legge il foglio per label — le colonne arrivano come Object.values
+  function getByLabel(label) {
     for (const r of raw) {
-      const a = String(r['A'] || r[Object.keys(r)[0]] || '').trim().toLowerCase();
-      const b = num(r['B'] || r[Object.keys(r)[1]] || 0);
-      if (a.includes(label.toLowerCase()) && b > 0) return b;
+      const vals = Object.values(r);
+      const a = String(vals[0] || '').trim().toLowerCase();
+      const b = num(vals[1] || 0);
+      if (a.includes(label.toLowerCase()) && b !== 0) return b;
     }
     return 0;
   }
 
-  // Costi fissi mensili dal foglio
-  const affitto      = getVal('affitto');
-  const personale    = getVal('personale');
-  const utenze       = getVal('utenze');
-  const assicurazioni = getVal('assicurazioni');
-  const consulenze   = getVal('commercialista') || getVal('consulenze');
-  const altreFisse   = getVal('altre spese fisse') || getVal('altre spese');
-  const totaleFisso  = affitto + personale + utenze + assicurazioni + consulenze + altreFisse;
+  // Legge direttamente i totali precalcolati nel foglio
+  const totaleFisso    = getByLabel('totale costi fissi');
+  const fbAssoluto     = getByLabel('food&beverage');
+  const totSerate      = getByLabel('totale costi serate mensili');
+  const accontoMensile = getByLabel('accantonamento mensile') || 0;
+  const totaleCosti    = getByLabel('totale costi fissi + semi-fissi') + fbAssoluto + accontoMensile;
+  const bepMensileFoglio = getByLabel('bep mensile (€ netto iva');
 
-  // Costi variabili % dal foglio
-  const foodCostPct  = getVal('food cost') || 28;
-  const bevCostPct   = getVal('beverage') || 32;
-  const altreVarPct  = getVal('altre %') || 4;
-  const totVarPct    = foodCostPct + bevCostPct + altreVarPct;
-  const margContrib  = 100 - totVarPct;
+  // Dettaglio costi fissi per la struttura
+  const affitto       = getByLabel('affitto');
+  const personale     = getByLabel('personale dipendente');
+  const utenze        = getByLabel('utenze medie');
+  const assicurazioni = getByLabel('assicurazioni');
+  const consulenze    = getByLabel('commercialista');
+  const altreFisse    = getByLabel('altre spese fisse');
 
-  // Costi serate
-  const nserate      = getVal('n° serate') || getVal('serate previste') || 4;
-  const djSerata     = getVal('dj') || getVal('musicist') || 200;
-  const siae         = getVal('siae') || 90;
-  const facchinaggio = getVal('facchinaggio') || 0;
-  const promozione   = getVal('promozione') || getVal('social') || 150;
-  const totSerate    = nserate * (djSerata + siae + facchinaggio + promozione);
-
-  // Imposte
-  const ires         = getVal('ires') || 0;
-  const irap         = getVal('irap') || 0;
-  const crediti      = getVal('crediti') || 0;
-  const imposteMensili = (ires + irap + crediti) / 12;
-
-  const totaleCostiMensili = totaleFisso + totSerate + imposteMensili;
-
-  // BEP = Costi fissi / Margine di contribuzione
-  const bepMensile  = margContrib > 0 ? (totaleCostiMensili / (margContrib / 100)) : 0;
-  const bepAnnuale  = bepMensile * 12;
-
-  // Dati reali dal Riepilogo — periodo selezionato
-  const curr = getPeriodRows(DATA.riepilogo, 0);
+  // DATI REALI DAL RIEPILOGO
+  const now   = new Date();
+  const curr  = getPeriodRows(DATA.riepilogo, 0);
   const incassoPeriodo = sumField(curr, 'incasso');
   const copertiPeriodo = sumField(curr, 'coperti');
 
-  // YTD 2026
-  const now = new Date();
+  // YTD
   const ytd = DATA.riepilogo.filter(r => {
     const d = parseDate(r.data);
     return d && d.getFullYear() === now.getFullYear();
   });
-  const incassoYTD  = sumField(ytd, 'incasso');
+  const incassoYTD = sumField(ytd, 'incasso');
   const mesiPassati = now.getMonth() + 1;
   const proiezioneAnnuale = mesiPassati > 0 ? incassoYTD / mesiPassati * 12 : 0;
 
-  // Food cost reale: F&B / incasso
-  const foodReale   = sumField(curr, 'cucina') + sumField(curr, 'dolci');
-  const bevReale    = sumField(curr, 'vini') + sumField(curr, 'bevande') + sumField(curr, 'braceria');
-  const foodCostReale = incassoPeriodo > 0 ? foodReale / incassoPeriodo * 100 : 0;
-  const bevCostReale  = incassoPeriodo > 0 ? bevReale  / incassoPeriodo * 100 : 0;
+  // F&B % reale sul periodo
+  const fbPctReale = incassoPeriodo > 0 ? fbAssoluto / incassoPeriodo * 100 : 0;
 
-  // Gap BEP
+  // Margine di contribuzione = (Incasso - F&B assoluto) / Incasso
+  const margineAssoluto = incassoPeriodo - fbAssoluto;
+  const marginePercReale = incassoPeriodo > 0 ? margineAssoluto / incassoPeriodo * 100 : 0;
+
+  // BEP = Costi fissi / (1 - F&B% reale)
+  // Con F&B assoluto: BEP = Costi fissi totali (incluso F&B mensile stimato)
+  const bepMensile  = bepMensileFoglio || totaleCosti;
+  const bepAnnuale  = bepMensile * 12;
+
+  // Gap
   const gapMensile = incassoPeriodo - bepMensile;
-  const colGap     = gapMensile >= 0 ? 'var(--green)' : 'var(--red)';
   const percBEP    = bepMensile > 0 ? Math.min(incassoPeriodo / bepMensile * 100, 150) : 0;
   const colBar     = percBEP >= 100 ? 'var(--green)' : percBEP >= 80 ? 'var(--gold)' : 'var(--red)';
+  const colGap     = gapMensile >= 0 ? 'var(--green)' : 'var(--red)';
 
   const labelPeriodo = getPeriodLabel(0);
 
   return '<div class="kpi-grid">' +
-    '<div class="kpi-card"><div class="kpi-label">BEP mensile</div><div class="kpi-value gold">' + eur(bepMensile) + '</div><div><span class="kpi-sub">punto di pareggio</span></div></div>' +
-    '<div class="kpi-card"><div class="kpi-label">BEP annuale</div><div class="kpi-value">' + eur(bepAnnuale) + '</div><div><span class="kpi-sub">obiettivo minimo</span></div></div>' +
-    '<div class="kpi-card"><div class="kpi-label">Incasso ' + labelPeriodo + '</div><div class="kpi-value" style="color:' + colGap + '">' + eur(incassoPeriodo) + '</div><div><span class="kpi-sub ' + (gapMensile>=0?'pos':'neg') + '">' + (gapMensile>=0?'+':'')+eur(gapMensile) + ' vs BEP</span></div></div>' +
-    '<div class="kpi-card"><div class="kpi-label">Proiezione annuale</div><div class="kpi-value">' + eur(proiezioneAnnuale) + '</div><div><span class="kpi-sub">basata su YTD</span></div></div>' +
+    '<div class="kpi-card"><div class="kpi-label">BEP mensile</div>' +
+    '<div class="kpi-value gold">' + eur(bepMensile) + '</div>' +
+    '<div><span class="kpi-sub">costi totali mensili</span></div></div>' +
+
+    '<div class="kpi-card"><div class="kpi-label">BEP annuale</div>' +
+    '<div class="kpi-value">' + eur(bepAnnuale) + '</div>' +
+    '<div><span class="kpi-sub">proiezione 12 mesi</span></div></div>' +
+
+    '<div class="kpi-card"><div class="kpi-label">Incasso ' + labelPeriodo + '</div>' +
+    '<div class="kpi-value" style="color:' + colGap + '">' + eur(incassoPeriodo) + '</div>' +
+    '<div><span style="color:' + colGap + ';font-weight:600">' +
+    (gapMensile >= 0 ? '+' : '') + eur(gapMensile) + ' vs BEP</span></div></div>' +
+
+    '<div class="kpi-card"><div class="kpi-label">F&B % reale</div>' +
+    '<div class="kpi-value">' + fbPctReale.toFixed(1) + '%</div>' +
+    '<div><span class="kpi-sub">' + eur(fbAssoluto) + ' / ' + eur(incassoPeriodo) + '</span></div></div>' +
     '</div>' +
 
     '<div class="card">' +
@@ -1202,46 +1202,48 @@ function buildBEP() {
     '<div class="two-col">' +
     '<div class="card"><div class="card-title">Struttura costi mensili</div>' +
     [
-      ['Affitto / leasing', affitto],
-      ['Personale', personale],
-      ['Utenze', utenze],
-      ['Consulenze', consulenze],
-      ['Serate / intrattenimento', totSerate],
-      ['Assicurazioni', assicurazioni],
-      ['Altre spese fisse', altreFisse],
+      ['Affitto / leasing',     affitto],
+      ['Personale',             personale],
+      ['Utenze',                utenze],
+      ['Consulenze',            consulenze],
+      ['Marketing / serate',    totSerate],
+      ['Assicurazioni',         assicurazioni],
+      ['Altre spese fisse',     altreFisse],
+      ['F&B (costo assoluto)',  fbAssoluto],
+      ['Accantonamento imposte',accontoMensile],
     ].filter(r => r[1] > 0).map(r =>
       '<div class="compare-row"><span class="compare-label">' + r[0] + '</span>' +
       '<span class="compare-curr">' + eur(r[1]) + '</span>' +
-      '<span class="kpi-sub" style="margin-left:8px">' + (totaleFisso>0?(r[1]/totaleCostiMensili*100).toFixed(1)+'%':'') + '</span></div>'
+      '<span class="kpi-sub" style="margin-left:6px">' + (totaleCosti > 0 ? (r[1]/totaleCosti*100).toFixed(1) + '%' : '') + '</span></div>'
     ).join('') +
     '<div class="compare-row" style="border-top:1px solid var(--border);margin-top:8px;padding-top:8px">' +
-    '<span class="compare-label" style="font-weight:700">Totale costi mensili</span>' +
-    '<span class="compare-curr" style="font-weight:700">' + eur(totaleCostiMensili) + '</span></div>' +
+    '<span class="compare-label" style="font-weight:700">Totale costi</span>' +
+    '<span class="compare-curr" style="font-weight:700">' + eur(totaleCosti) + '</span></div>' +
     '</div>' +
 
-    '<div class="card"><div class="card-title">Margine di contribuzione</div>' +
-    '<div class="compare-row"><span class="compare-label">Food cost %</span>' +
-    '<span class="compare-curr">' + foodCostPct.toFixed(0) + '%</span>' +
-    '<span class="kpi-sub" style="margin-left:8px">reale: ' + foodCostReale.toFixed(1) + '%</span></div>' +
-    '<div class="compare-row"><span class="compare-label">Beverage cost %</span>' +
-    '<span class="compare-curr">' + bevCostPct.toFixed(0) + '%</span>' +
-    '<span class="kpi-sub" style="margin-left:8px">reale: ' + bevCostReale.toFixed(1) + '%</span></div>' +
-    '<div class="compare-row"><span class="compare-label">Altre % variabili</span>' +
-    '<span class="compare-curr">' + altreVarPct.toFixed(0) + '%</span></div>' +
-    '<div class="compare-row" style="border-top:1px solid var(--border);margin-top:8px;padding-top:8px">' +
-    '<span class="compare-label" style="font-weight:700">Margine contribuzione</span>' +
-    '<span class="compare-curr" style="font-weight:700;color:var(--green)">' + margContrib.toFixed(0) + '%</span></div>' +
+    '<div class="card"><div class="card-title">Analisi margine</div>' +
+    '<div class="compare-row"><span class="compare-label">Incasso periodo</span><span class="compare-curr">' + eur(incassoPeriodo) + '</span></div>' +
+    '<div class="compare-row"><span class="compare-label">F&B assoluto</span><span class="compare-curr" style="color:var(--red)">- ' + eur(fbAssoluto) + '</span></div>' +
+    '<div class="compare-row" style="border-top:1px solid var(--border);margin-top:4px;padding-top:8px">' +
+    '<span class="compare-label" style="font-weight:700">Margine lordo</span>' +
+    '<span class="compare-curr" style="font-weight:700;color:' + (margineAssoluto>=0?'var(--green)':'var(--red)') + '">' + eur(margineAssoluto) + '</span></div>' +
+    '<div class="compare-row"><span class="compare-label">Margine %</span>' +
+    '<span class="compare-curr" style="color:' + (marginePercReale>=40?'var(--green)':'var(--gold)') + '">' + marginePercReale.toFixed(1) + '%</span></div>' +
+    '<div class="compare-row"><span class="compare-label">Coperti periodo</span><span class="compare-curr">' + copertiPeriodo + '</span></div>' +
+    '<div class="compare-row"><span class="compare-label">Margine per coperto</span>' +
+    '<span class="compare-curr">' + (copertiPeriodo > 0 ? eur(margineAssoluto/copertiPeriodo) : 'N/D') + '</span></div>' +
     '</div></div>' +
 
-    '<div class="card"><div class="card-title">Dati YTD ' + now.getFullYear() + '</div>' +
+    '<div class="card"><div class="card-title">YTD ' + now.getFullYear() + ' — Proiezione</div>' +
     '<div class="compare-row"><span class="compare-label">Incasso YTD</span><span class="compare-curr">' + eur(incassoYTD) + '</span></div>' +
     '<div class="compare-row"><span class="compare-label">Proiezione a fine anno</span><span class="compare-curr">' + eur(proiezioneAnnuale) + '</span></div>' +
     '<div class="compare-row"><span class="compare-label">BEP annuale</span><span class="compare-curr">' + eur(bepAnnuale) + '</span></div>' +
     '<div class="compare-row"><span class="compare-label">Gap proiezione vs BEP</span>' +
     '<span class="compare-curr" style="color:' + (proiezioneAnnuale>=bepAnnuale?'var(--green)':'var(--red)') + '">' +
-    (proiezioneAnnuale>=bepAnnuale?'+':'') + eur(proiezioneAnnuale - bepAnnuale) + '</span></div>' +
+    (proiezioneAnnuale >= bepAnnuale ? '+' : '') + eur(proiezioneAnnuale - bepAnnuale) + '</span></div>' +
     '</div>';
 }
+
 
 // ── TAB: PERSONALIZZATO ───────────────────────────────────────
 let customRange = { curr: null, prev: null };
