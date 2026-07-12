@@ -1,0 +1,1681 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Casa Rosebery — Dashboard</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;600&display=swap');
+
+    :root {
+      --bg:       #f7f5f0;
+      --surface:  #eeece6;
+      --card:     #ffffff;
+      --border:   #e0ddd5;
+      --gold:     #a07830;
+      --gold-dim: #c8a84b;
+      --gold-bg:  #fdf8f0;
+      --cream:    #1a1208;
+      --green:    #2d7a4f;
+      --green-bg: #edf7f1;
+      --red:      #c0392b;
+      --red-bg:   #fdf0ef;
+      --blue:     #2c5fb3;
+      --muted:    #9a9080;
+      --sub:      #6a6055;
+      --text:     #2a2018;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { background: var(--bg); color: var(--text); font-family: 'Inter', sans-serif; font-size: 14px; line-height: 1.5; min-height: 100vh; }
+
+    header { padding: 28px 40px 20px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: flex-end; }
+    .logo-area h1 { font-family: 'Playfair Display', serif; font-size: 30px; font-weight: 900; color: var(--cream); letter-spacing: -0.5px; }
+    .logo-area .tagline { color: var(--gold-dim); font-size: 11px; letter-spacing: 4px; text-transform: uppercase; margin-top: 4px; }
+    .header-meta { text-align: right; color: var(--sub); font-size: 12px; }
+    .header-meta .last-update { color: var(--gold); font-size: 11px; letter-spacing: 1px; text-transform: uppercase; font-weight: 600; }
+
+    /* ── Period selector ─────────────────────────────── */
+    .period-bar {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 12px 40px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .period-label { color: var(--sub); font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; margin-right: 6px; }
+
+    .period-btn {
+      background: var(--card);
+      border: 1px solid var(--border);
+      color: var(--muted);
+      font-family: 'Inter', sans-serif;
+      font-size: 12px;
+      font-weight: 500;
+      padding: 6px 16px;
+      border-radius: 20px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .period-btn.active {
+      background: var(--gold);
+      border-color: var(--gold);
+      color: #0c0b09;
+      font-weight: 700;
+    }
+
+    .period-info {
+      margin-left: auto;
+      color: var(--sub);
+      font-size: 11px;
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* ── Nav tabs ─────────────────────────────────── */
+    nav { display: flex; padding: 0 40px; border-bottom: 1px solid var(--border); }
+    nav button { background: none; border: none; border-bottom: 2px solid transparent; color: var(--muted); font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 500; padding: 12px 18px; cursor: pointer; transition: all 0.2s; }
+    nav button.active { color: var(--gold); border-bottom-color: var(--gold); }
+    nav button:hover:not(.active) { color: var(--text); }
+
+    main { padding: 28px 40px; max-width: 1200px; margin: 0 auto; }
+
+    .state-msg { text-align: center; padding: 80px 20px; color: var(--sub); }
+    .spinner { width: 32px; height: 32px; border: 2px solid var(--border); border-top-color: var(--gold); border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 16px; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .kpi-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 12px; margin-bottom: 20px; }
+    .kpi-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+    .kpi-label { color: var(--sub); font-size: 10px; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 8px; }
+    .kpi-value { font-family: 'Playfair Display', serif; font-size: 26px; font-weight: 700; color: var(--cream); letter-spacing: -0.5px; margin-bottom: 6px; }
+    .kpi-value.gold { color: var(--gold); }
+    .kpi-value.blue { color: var(--blue); }
+    .kpi-delta { display: inline-flex; align-items: center; gap: 4px; font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 20px; }
+    .kpi-delta.pos { color: var(--green); background: var(--green-bg); }
+    .kpi-delta.neg { color: var(--red);   background: var(--red-bg);   }
+    .kpi-sub { color: var(--muted); font-size: 11px; margin-left: 6px; }
+
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 22px; margin-bottom: 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.06); }
+    .card-title { color: var(--sub); font-size: 10px; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 18px; }
+
+    .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+
+    .highlight-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
+    .highlight-card { border-radius: 10px; padding: 14px 16px; }
+    .highlight-card.best  { background: var(--green-bg); border: 1px solid #1a3a20; }
+    .highlight-card.worst { background: var(--red-bg);   border: 1px solid #3a1a1a; }
+    .highlight-label { font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; margin-bottom: 6px; }
+    .highlight-card.best  .highlight-label { color: var(--green); }
+    .highlight-card.worst .highlight-label { color: var(--red); }
+    .highlight-day { font-family: 'Playfair Display', serif; font-size: 18px; font-weight: 700; color: var(--cream); }
+    .highlight-sub { color: var(--muted); font-size: 11px; margin-top: 2px; }
+
+    .compare-row { display: flex; align-items: center; gap: 10px; background: var(--surface); border-radius: 10px; padding: 11px 14px; margin-bottom: 7px; }
+    .compare-label { flex: 1; font-size: 13px; }
+    .compare-prev { color: var(--muted); font-family: 'JetBrains Mono', monospace; font-size: 12px; width: 90px; text-align: right; }
+    .compare-arrow { color: var(--muted); font-size: 12px; }
+    .compare-curr { color: var(--cream); font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 600; width: 90px; text-align: right; }
+
+    .art-row { display: flex; align-items: center; gap: 10px; margin-bottom: 13px; }
+    .art-rank { color: var(--muted); font-size: 11px; font-family: 'JetBrains Mono', monospace; width: 20px; text-align: right; flex-shrink: 0; }
+    .art-body { flex: 1; }
+    .art-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+    .art-name { font-size: 13px; }
+    .art-right { display: flex; align-items: center; gap: 8px; }
+    .art-value { font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 600; color: var(--gold); }
+    .art-bar-track { height: 3px; background: var(--border); border-radius: 2px; }
+    .art-bar-fill { height: 100%; background: var(--gold); border-radius: 2px; opacity: 0.6; }
+
+    .obj-bar-track { height: 8px; background: var(--border); border-radius: 4px; overflow: hidden; }
+    .obj-bar-fill { height: 100%; border-radius: 4px; transition: width 0.6s ease; }
+    .obj-labels { display: flex; justify-content: space-between; font-size: 11px; color: var(--sub); margin-top: 6px; }
+
+
+    /* ── Date pickers ────────────────────────────────── */
+    .date-picker-row {
+      display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+      background: var(--surface); border-radius: 10px; padding: 14px 18px; margin-bottom: 20px;
+    }
+    .date-picker-row label { color: var(--sub); font-size: 11px; text-transform: uppercase; letter-spacing: 1.5px; }
+    .date-picker-row input[type="date"] {
+      background: var(--card); border: 1px solid var(--border); color: var(--text);
+      font-family: 'JetBrains Mono', monospace; font-size: 13px;
+      padding: 7px 12px; border-radius: 8px; cursor: pointer;
+    }
+    .date-picker-row .sep { color: var(--muted); font-size: 12px; }
+    .date-picker-row button.apply-btn {
+      background: var(--gold); border: none; color: #0c0b09;
+      font-family: 'Inter', sans-serif; font-size: 12px; font-weight: 700;
+      padding: 8px 18px; border-radius: 8px; cursor: pointer; margin-left: auto;
+    }
+
+
+    /* ── Menu Engineering ────────────────────────────── */
+    .me-controls {
+      display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 20px; align-items: center;
+    }
+    .me-filter-btn {
+      background: var(--card); border: 1px solid var(--border);
+      color: var(--muted); font-family: 'Inter', sans-serif;
+      font-size: 12px; padding: 6px 14px; border-radius: 20px; cursor: pointer;
+    }
+    .me-filter-btn.active {
+      background: var(--gold); border-color: var(--gold); color: #0c0b09; font-weight: 700;
+    }
+    .me-period {
+      margin-left: auto;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .me-period label { color: var(--sub); font-size: 11px; }
+    .me-period select {
+      background: var(--card); border: 1px solid var(--border);
+      color: var(--text); font-size: 12px; padding: 5px 10px; border-radius: 8px;
+    }
+    .me-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .me-table th {
+      text-align: left; padding: 10px 14px;
+      color: var(--sub); font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px;
+      border-bottom: 1px solid var(--border);
+    }
+    .me-table td { padding: 10px 14px; border-bottom: 1px solid var(--border); }
+    .me-table tr:last-child td { border-bottom: none; }
+    .me-table tr:hover td { background: var(--surface); }
+    .quadrant-badge {
+      display: inline-block; padding: 3px 10px; border-radius: 20px;
+      font-size: 11px; font-weight: 700; letter-spacing: 0.5px;
+    }
+    .q-star    { background: #0d2a1a; color: #4caf7d; }
+    .q-plow    { background: #1a1508; color: #c8a84b; }
+    .q-puzzle  { background: #0d1a2a; color: #5b8ef0; }
+    .q-dog     { background: #1a0d0d; color: #d95f5f; }
+    .me-legend {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px;
+    }
+    .me-legend-item {
+      border-radius: 10px; padding: 12px 16px;
+    }
+    .me-legend-item.star   { background: #0d2a1a; border: 1px solid #1a3a20; }
+    .me-legend-item.plow   { background: #1a1508; border: 1px solid #2a2010; }
+    .me-legend-item.puzzle { background: #0d1a2a; border: 1px solid #1a2a40; }
+    .me-legend-item.dog    { background: #1a0d0d; border: 1px solid #3a1a1a; }
+    .me-legend-title { font-size: 12px; font-weight: 700; margin-bottom: 3px; }
+    .me-legend-desc  { font-size: 11px; color: var(--muted); }
+    .me-legend-item.star   .me-legend-title { color: #4caf7d; }
+    .me-legend-item.plow   .me-legend-title { color: #c8a84b; }
+    .me-legend-item.puzzle .me-legend-title { color: #5b8ef0; }
+    .me-legend-item.dog    .me-legend-title { color: #d95f5f; }
+    .foodcost-note {
+      color: var(--muted); font-size: 11px; font-style: italic;
+      padding: 8px 0; border-top: 1px solid var(--border); margin-top: 4px;
+    }
+
+    canvas { max-width: 100%; }
+        canvas { max-width: 100%; }
+
+    footer { text-align: center; padding: 20px 40px; color: var(--muted); font-size: 10px; letter-spacing: 2px; text-transform: uppercase; border-top: 1px solid var(--border); margin-top: 20px; }
+
+    @media (max-width: 768px) {
+      header { padding: 12px 16px; flex-direction: column; gap: 8px; align-items: flex-start; }
+      header .logo-area img { height: 52px; }
+      .header-meta { text-align: left; }
+      main { padding: 14px 16px; }
+      .period-bar { padding: 8px 16px; flex-wrap: wrap; gap: 6px; }
+      .period-info { display: none; }
+      nav { padding: 0 16px; overflow-x: auto; white-space: nowrap; }
+      nav button { padding: 10px 14px; font-size: 12px; }
+      .two-col, .highlight-grid { grid-template-columns: 1fr; }
+      .kpi-grid { grid-template-columns: 1fr 1fr; gap: 8px; }
+      .kpi-card { padding: 12px 14px; }
+      .kpi-value { font-size: 20px; }
+      .kpi-label { font-size: 9px; }
+      .card { padding: 16px; }
+      .compare-row { flex-wrap: wrap; gap: 6px; }
+      .compare-prev, .compare-curr { width: auto; }
+      .art-value { font-size: 12px; }
+      .date-picker-row { flex-direction: column; align-items: flex-start; gap: 8px; }
+      .date-picker-row .apply-btn { width: 100%; text-align: center; }
+      footer { padding: 14px 16px; font-size: 9px; }
+    }
+
+    @media (max-width: 380px) {
+      .kpi-grid { grid-template-columns: 1fr; }
+      .kpi-value { font-size: 24px; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo-area">
+    <img src="logo.png" alt="Casa Rosebery" style="height:72px;width:auto;">
+  </div>
+  <div class="header-meta">
+    <div style="display:flex;align-items:center;gap:10px;justify-content:flex-end">
+      <div class="last-update" id="last-update">Caricamento...</div>
+      <button id="refresh-btn" onclick="refreshData()" title="Aggiorna dati" style="background:none;border:1px solid var(--border);color:var(--sub);border-radius:6px;padding:4px 8px;cursor:pointer;font-size:12px;">↻</button>
+    </div>
+    <div id="header-period" style="margin-top:4px"></div>
+  </div>
+</header>
+
+<!-- Selettore periodo -->
+<div class="period-bar">
+  <span class="period-label">Periodo</span>
+  <button class="period-btn active" onclick="setPeriod('week',this)">Settimana</button>
+  <button class="period-btn" onclick="setPeriod('month',this)">Mese</button>
+  <button class="period-btn" onclick="setPeriod('quarter',this)">Trimestre</button>
+  <div class="period-info" id="period-info"></div>
+</div>
+
+<nav>
+  <button class="active" onclick="showTab('oggi',this)">Oggi</button>
+  <button onclick="showTab('overview',this)">Settimana</button>
+  <button onclick="showTab('obiettivo',this)">Obiettivo</button>
+  <button onclick="showTab('articoli',this)">Articoli</button>
+  <button onclick="showTab('trend',this)">Trend</button>
+  <button onclick="showTab('anno',this)">Anno</button>
+  <button onclick="showTab('menu',this)">Menu Engineering</button>
+  <button onclick="showTab('bep',this)">BEP</button>
+  <button onclick="showTab('custom',this)">Personalizzato</button>
+</nav>
+
+<main id="main-content">
+  <div class="state-msg">
+    <div class="spinner"></div>
+    <div>Caricamento dati...</div>
+  </div>
+</main>
+
+<footer>Casa Rosebery &nbsp;·&nbsp; Dashboard Analytics &nbsp;·&nbsp; <span id="footer-date"></span></footer>
+
+<script>
+const SHEET_ID  = '1hl9Ur_qD4hdr5V8jaigx9dWO94EmLRI7_yg678kgkKE';
+let DATA = { riepilogo: [], articoli: [], obiettivi: [], costiBEP: [], _bepCaricato: false };
+let CHARTS = {};
+let currentTab = 'oggi';
+let currentPeriod = 'week'; // week | month | quarter
+
+// ── Utils ─────────────────────────────────────────────────────
+const eur = n => '€' + Number(n||0).toLocaleString('it-IT', {minimumFractionDigits:0, maximumFractionDigits:0});
+const num = v => typeof v==='number' ? v : parseFloat(String(v||'').replace(',','.').replace(/[^\d.-]/g,''))||0;
+
+function parseDate(v) {
+  if (!v) return null;
+  if (v instanceof Date) return v;
+  const s = String(v);
+  const gv = s.match(/Date\((\d+),(\d+),(\d+)\)/);
+  if (gv) return new Date(+gv[1], +gv[2], +gv[3]);
+  const it = s.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+  if (it) return new Date(+it[3], +it[2]-1, +it[1]);
+  const d = new Date(s);
+  return isNaN(d) ? null : d;
+}
+
+function isoWeek(d) {
+  const tmp = new Date(d); tmp.setHours(0,0,0,0);
+  tmp.setDate(tmp.getDate() + 3 - (tmp.getDay()+6)%7);
+  const w1 = new Date(tmp.getFullYear(),0,4);
+  return Math.round(((tmp-w1)/86400000-3+(w1.getDay()+6)%7)/7)+1;
+}
+
+function sumField(rows, field) { return rows.reduce((s,r)=>s+num(r[field]||0),0); }
+
+function delta(curr, prev) {
+  if (!prev || prev===0) return null;
+  return (curr-prev)/prev*100;
+}
+
+function deltaTag(d) {
+  if (d===null) return '';
+  const cls = d>=0?'pos':'neg', arrow=d>=0?'▲':'▼';
+  return `<span class="kpi-delta ${cls}">${arrow} ${Math.abs(d).toFixed(1)}%</span>`;
+}
+
+// ── Period helpers ────────────────────────────────────────────
+function getPeriodRows(rows, offset) {
+  const now = new Date();
+
+  if (currentPeriod === 'week') {
+    // Settimana: confronto settimana intera vs settimana precedente
+    return rows.filter(r => {
+      const d = parseDate(r.data); if (!d) return false;
+      const target = new Date(now); target.setDate(now.getDate() - offset*7);
+      return isoWeek(d)===isoWeek(target) && d.getFullYear()===target.getFullYear();
+    });
+  }
+
+  if (currentPeriod === 'month') {
+    // Opzione A: primi N giorni del mese, dove N = giorno corrente
+    // Mese corrente (offset=0): 1-oggi
+    // Mese precedente (offset=1): 1-(stesso giorno del mese precedente)
+    const giornoCorrente = now.getDate(); // es. 19
+    const meseTarget = new Date(now.getFullYear(), now.getMonth() - offset, 1);
+    const annoTarget = meseTarget.getFullYear();
+    const meseIdx    = meseTarget.getMonth();
+    // Giorno limite: min(giornoCorrente, giorni nel mese target)
+    const giorniNelMese = new Date(annoTarget, meseIdx+1, 0).getDate();
+    const giornoLimite  = Math.min(giornoCorrente, giorniNelMese);
+    return rows.filter(r => {
+      const d = parseDate(r.data); if (!d) return false;
+      return d.getMonth()===meseIdx && d.getFullYear()===annoTarget && d.getDate()<=giornoLimite;
+    });
+  }
+
+  if (currentPeriod === 'quarter') {
+    // Opzione A: giorni trascorsi del trimestre corrente vs stessi giorni del trimestre precedente
+    const currQStart = new Date(now.getFullYear(), Math.floor(now.getMonth()/3)*3, 1);
+    const giorniDallInizioQ = Math.floor((now - currQStart) / 86400000) + 1;
+    const targetQStart = new Date(currQStart);
+    targetQStart.setMonth(currQStart.getMonth() - offset*3);
+    const targetQLimite = new Date(targetQStart);
+    targetQLimite.setDate(targetQStart.getDate() + giorniDallInizioQ - 1);
+    return rows.filter(r => {
+      const d = parseDate(r.data); if (!d) return false;
+      return d >= targetQStart && d <= targetQLimite;
+    });
+  }
+
+  return [];
+}
+
+function getPeriodLabel(offset) {
+  const now = new Date();
+  const mesi = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
+  if (currentPeriod === 'week') {
+    const target = new Date(now); target.setDate(now.getDate()-offset*7);
+    return offset===0 ? `Sett. ${isoWeek(target)}` : `Sett. ${isoWeek(target)} (prec.)`;
+  }
+  if (currentPeriod === 'month') {
+    const target = new Date(now.getFullYear(), now.getMonth()-offset, 1);
+    const giorniNelMese = new Date(target.getFullYear(), target.getMonth()+1, 0).getDate();
+    const giornoLimite  = Math.min(now.getDate(), giorniNelMese);
+    const label = mesi[target.getMonth()]+' '+target.getFullYear();
+    return offset===0 ? label+' (1-'+now.getDate()+')' : label+' (1-'+giornoLimite+')';
+  }
+  if (currentPeriod === 'quarter') {
+    const target = new Date(now); target.setMonth(now.getMonth()-offset*3);
+    const q = Math.floor(target.getMonth()/3)+1;
+    return `Q${q} ${target.getFullYear()}`;
+  }
+}
+
+function getPeriodInfoText() {
+  if (currentTab === 'oggi') return new Date().toLocaleDateString('it-IT');
+  if (currentTab === 'anno') return String(new Date().getFullYear());
+  const now = new Date();
+  const mesi = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
+  if (currentPeriod === 'week') {
+    const mon = new Date(now); mon.setDate(now.getDate()-(now.getDay()||7)+1);
+    const sun = new Date(mon); sun.setDate(mon.getDate()+6);
+    return `${mon.getDate()}/${mon.getMonth()+1} — ${sun.getDate()}/${sun.getMonth()+1}/${sun.getFullYear()}`;
+  }
+  if (currentPeriod === 'month') return mesi[now.getMonth()]+' '+now.getFullYear();
+  if (currentPeriod === 'quarter') {
+    const q = Math.floor(now.getMonth()/3)+1;
+    return `Q${q} ${now.getFullYear()}`;
+  }
+}
+
+function setPeriod(period, btn) {
+  currentPeriod = period;
+  document.querySelectorAll('.period-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('period-info').textContent = getPeriodInfoText();
+  renderTab();
+}
+
+function showTab(tab, btn) {
+  currentTab = tab;
+  document.querySelectorAll('nav button').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+  renderTab();
+}
+
+function renderTab() {
+  const el = document.getElementById('main-content');
+  // Tab che richiedono articoli: carica lazy
+  const needsArticoli = ['oggi','articoli','custom'];
+  const needsBEP = ['bep'];
+  if (needsArticoli.includes(currentTab) && !DATA._articoliCaricati) {
+    el.innerHTML = '<div class="state-msg"><div class="spinner"></div><div>Caricamento articoli...</div></div>';
+    fetchSheet('Articoli').then(aRaw => {
+      DATA.articoli = parseArticoli(aRaw);
+      DATA._articoliCaricati = true;
+      renderTab(); // richiama dopo caricamento
+    }).catch(() => {
+      DATA.articoli = [];
+      DATA._articoliCaricati = true;
+      renderTab();
+    });
+    return;
+  }
+  if (currentTab==='oggi')           el.innerHTML = buildOggi();
+  else if (currentTab==='overview')  el.innerHTML = buildOverview();
+  else if (currentTab==='obiettivo') el.innerHTML = buildObiettivo();
+  else if (currentTab==='articoli')  el.innerHTML = buildArticoli();
+  else if (currentTab==='anno')      el.innerHTML = buildAnno();
+  else if (currentTab==='menu')      el.innerHTML = buildMenuEngineering();
+  else if (currentTab==='bep')       el.innerHTML = buildBEP();
+  else if (currentTab==='trend')     el.innerHTML = buildTrend();
+  else if (currentTab==='custom')    el.innerHTML = buildCustom();
+  renderCharts();
+}
+
+// ── TAB: PANORAMICA ───────────────────────────────────────────
+function buildOverview() {
+  const curr = getPeriodRows(DATA.riepilogo, 0);
+  const prev = getPeriodRows(DATA.riepilogo, 1);
+
+  const totC = { inc:sumField(curr,'incasso'), cop:sumField(curr,'coperti') };
+  const totP = { inc:sumField(prev,'incasso'), cop:sumField(prev,'coperti') };
+  const dInc  = delta(totC.inc, totP.inc);
+  const dCop  = delta(totC.cop, totP.cop);
+  const sconC = totC.cop>0 ? totC.inc/totC.cop : 0;
+  const sconP = totP.cop>0 ? totP.inc/totP.cop : 0;
+  const dScon = delta(sconC, sconP);
+
+  const best  = [...curr].sort((a,b)=>b.incasso-a.incasso)[0];
+  const worst = [...curr].sort((a,b)=>a.incasso-b.incasso)[0];
+
+  const labelCurr = getPeriodLabel(0);
+  const labelPrev = getPeriodLabel(1);
+
+  // Chart: incasso per giorno/settimana del periodo
+  const chartDays = curr.map(r=>{ const d=parseDate(r.data); return d?`${d.getDate()}/${d.getMonth()+1}`:r.data; });
+  const chartCurr = curr.map(r=>r.incasso);
+  const chartPrev = prev.map(r=>r.incasso);
+  window._overviewData = { chartDays, chartCurr, chartPrev, curr, labelCurr, labelPrev };
+
+  return `
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-label">Incasso ${labelCurr}</div>
+        <div class="kpi-value gold">${eur(totC.inc)}</div>
+        <div>${deltaTag(dInc)} <span class="kpi-sub">vs ${labelPrev}</span></div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Coperti</div>
+        <div class="kpi-value blue">${totC.cop}</div>
+        <div>${deltaTag(dCop)} <span class="kpi-sub">vs ${labelPrev}</span></div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Scontrino medio</div>
+        <div class="kpi-value">${eur(sconC)}</div>
+        <div>${deltaTag(dScon)}</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">Giorni servizio</div>
+        <div class="kpi-value">${curr.length}</div>
+        <div>${deltaTag(delta(curr.length,prev.length))}</div>
+      </div>
+    </div>
+
+    <div class="highlight-grid">
+      <div class="highlight-card best">
+        <div class="highlight-label">🏆 Miglior giorno</div>
+        <div class="highlight-day">${best?formatDay(best.data):'N/D'}</div>
+        <div class="highlight-sub">${best?eur(best.incasso)+' · '+best.coperti+' coperti':''}</div>
+      </div>
+      <div class="highlight-card worst">
+        <div class="highlight-label">📉 Giorno più basso</div>
+        <div class="highlight-day">${worst?formatDay(worst.data):'N/D'}</div>
+        <div class="highlight-sub">${worst?eur(worst.incasso)+' · '+worst.coperti+' coperti':''}</div>
+      </div>
+    </div>
+
+    <div class="two-col">
+      <div class="card">
+        <div class="card-title">Incasso giornaliero — ${labelCurr} vs ${labelPrev}</div>
+        <canvas id="chart-overview" height="220"></canvas>
+      </div>
+      <div class="card">
+        <div class="card-title">Categorie — ${labelCurr}</div>
+        <canvas id="chart-cat" height="220"></canvas>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Dettaglio ${labelCurr} vs ${labelPrev}</div>
+      ${['cucina','braceria','vini','dolci','bevande'].map(k=>{
+        const c=sumField(curr,k), p=sumField(prev,k), d=delta(c,p);
+        return `<div class="compare-row">
+          <span class="compare-label">${k.charAt(0).toUpperCase()+k.slice(1)}</span>
+          <span class="compare-prev">${eur(p)}</span>
+          <span class="compare-arrow">→</span>
+          <span class="compare-curr">${eur(c)}</span>
+          ${d!==null?`<span class="kpi-delta ${d>=0?'pos':'neg'}">${d>=0?'▲':'▼'} ${Math.abs(d).toFixed(1)}%</span>`:''}
+        </div>`;
+      }).join('')}
+    </div>
+  `;
+}
+
+function formatDay(v) {
+  const d=parseDate(v); if (!d) return String(v);
+  const days=['Dom','Lun','Mar','Mer','Gio','Ven','Sab'];
+  return days[d.getDay()]+' '+d.getDate()+'/'+(d.getMonth()+1);
+}
+
+// ── TAB: OBIETTIVO ────────────────────────────────────────────
+function buildObiettivo() {
+  const now = new Date();
+  const settCorrente = isoWeek(now);
+
+  // Filtra settimane in base al periodo selezionato
+  let settimaneDaConsiderare = [];
+  let labelPeriodo = '';
+
+  if (currentPeriod === 'week') {
+    // Settimana corrente
+    settimaneDaConsiderare = DATA.obiettivi.filter(o => o.sett === settCorrente);
+    labelPeriodo = 'Settimana ' + settCorrente;
+  } else if (currentPeriod === 'month') {
+    // Mese corrente: trova settimane che iniziano nel mese corrente
+    const meseCorrente = now.getMonth();
+    const annoCorrente = now.getFullYear();
+    // Usa settimane con consuntivo disponibile nel mese corrente
+    const curr = getPeriodRows(DATA.riepilogo, 0);
+    const totConsuntivo = sumField(curr, 'incasso');
+    // Somma obiettivi per le settimane del mese
+    const mesiNomi = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
+    labelPeriodo = mesiNomi[meseCorrente];
+    // Calcola obiettivo mensile come proporzione dell'annuale
+    const giorniMese = new Date(annoCorrente, meseCorrente+1, 0).getDate();
+    const objMensile = DATA.obiettivi.reduce((s,o) => s+o.objTeorico, 0) / 12;
+    const objRettMensile = objMensile; // semplificazione
+    const perc = objRettMensile > 0 ? Math.min(totConsuntivo/objRettMensile*100, 150) : 0;
+    const colBar = perc>=100?'var(--green)':perc>=70?'var(--gold)':'var(--red)';
+    const prev = getPeriodRows(DATA.riepilogo, 1);
+    const totPrev = sumField(prev, 'incasso');
+    const last12 = DATA.obiettivi.slice(-12);
+    window._objData = { last12 };
+    return buildObiettivoHTML(labelPeriodo, totConsuntivo, objRettMensile, perc, colBar, totPrev, last12);
+  } else if (currentPeriod === 'quarter') {
+    const q = Math.floor(now.getMonth()/3);
+    const qNomi = ['Q1','Q2','Q3','Q4'];
+    labelPeriodo = qNomi[q] + ' ' + now.getFullYear();
+    const curr = getPeriodRows(DATA.riepilogo, 0);
+    const totConsuntivo = sumField(curr, 'incasso');
+    const objTrimestrale = DATA.obiettivi.reduce((s,o) => s+o.objTeorico, 0) / 4;
+    const perc = objTrimestrale > 0 ? Math.min(totConsuntivo/objTrimestrale*100, 150) : 0;
+    const colBar = perc>=100?'var(--green)':perc>=70?'var(--gold)':'var(--red)';
+    const prev = getPeriodRows(DATA.riepilogo, 1);
+    const totPrev = sumField(prev, 'incasso');
+    const last12 = DATA.obiettivi.slice(-12);
+    window._objData = { last12 };
+    return buildObiettivoHTML(labelPeriodo, totConsuntivo, objTrimestrale, perc, colBar, totPrev, last12);
+  }
+
+  // Default: settimana
+  const obj = DATA.obiettivi.find(o=>o.sett===settCorrente);
+  const perc = obj&&obj.objRett>0 ? Math.min(obj.consuntivo/obj.objRett*100,150) : 0;
+  const colBar = perc>=100?'var(--green)':perc>=70?'var(--gold)':'var(--red)';
+  const last12 = DATA.obiettivi.filter(o=>o.sett<=settCorrente&&o.sett>=settCorrente-11).sort((a,b)=>a.sett-b.sett);
+  window._objData = { last12 };
+
+  const righe = [
+    {label:'Obiettivo teorico',     curr:obj?.objTeorico, fmt:eur},
+    {label:'Obiettivo rettificato', curr:obj?.objRett,    fmt:eur},
+    {label:'Consuntivo',            curr:obj?.consuntivo, fmt:eur},
+    {label:'Delta settimana',       curr:obj?.delta,      fmt:v=>(v>=0?'+':'')+eur(v)},
+    {label:'Delta cumulato anno',   curr:obj?.deltaCum,   fmt:v=>(v>=0?'+':'')+eur(v)},
+  ];
+
+  return '<div class="card">' +
+    '<div style="display:flex;justify-content:space-between;margin-bottom:8px">' +
+    '<div class="card-title" style="margin:0">Settimana ' + settCorrente + ' — Avanzamento obiettivo</div>' +
+    '<span style="font-family:\"JetBrains Mono\",monospace;font-size:20px;font-weight:600;color:'+colBar+'">' + perc.toFixed(1) + '%</span>' +
+    '</div>' +
+    '<div class="obj-bar-track"><div class="obj-bar-fill" style="width:'+Math.min(perc,100)+'%;background:'+colBar+'"></div></div>' +
+    '<div class="obj-labels"><span>€0</span><span>' + eur(obj?.objRett||0) + '</span></div>' +
+    '</div>' +
+    '<div class="card"><div class="card-title">Dettaglio obiettivi — ' + labelPeriodo + '</div>' +
+    righe.map(r =>
+      '<div class="compare-row"><span class="compare-label">' + r.label + '</span>' +
+      '<span class="compare-curr" style="color:' + (r.curr<0?'var(--red)':r.curr>0?'var(--green)':'var(--cream)') + '">' +
+      (r.curr!=null?r.fmt(r.curr):'N/D') + '</span></div>'
+    ).join('') +
+    '</div>' +
+    '<div class="card"><div class="card-title">Consuntivo vs Obiettivo — ultime 12 settimane</div>' +
+    '<canvas id="chart-obj" height="200"></canvas>' +
+    '</div>';
+}
+
+function buildObiettivoHTML(label, consuntivo, objRett, perc, colBar, prevConsuntivo, last12) {
+  const deltaVsPrec = prevConsuntivo > 0 ? ((consuntivo - prevConsuntivo) / prevConsuntivo * 100) : null;
+  return '<div class="card">' +
+    '<div style="display:flex;justify-content:space-between;margin-bottom:8px">' +
+    '<div class="card-title" style="margin:0">' + label + ' — Avanzamento obiettivo</div>' +
+    '<span style="font-family:\"JetBrains Mono\",monospace;font-size:20px;font-weight:600;color:'+colBar+'">' + perc.toFixed(1) + '%</span>' +
+    '</div>' +
+    '<div class="obj-bar-track"><div class="obj-bar-fill" style="width:'+Math.min(perc,100)+'%;background:'+colBar+'"></div></div>' +
+    '<div class="obj-labels"><span>€0</span><span>' + eur(objRett) + '</span></div>' +
+    '</div>' +
+    '<div class="card"><div class="card-title">Dettaglio — ' + label + '</div>' +
+    '<div class="compare-row"><span class="compare-label">Consuntivo</span><span class="compare-curr">' + eur(consuntivo) + '</span>' +
+    (deltaVsPrec!==null?'<span class="kpi-delta '+(deltaVsPrec>=0?'pos':'neg')+'">'+(deltaVsPrec>=0?'▲':'▼')+' '+Math.abs(deltaVsPrec).toFixed(1)+'%</span>':'') +
+    '</div>' +
+    '<div class="compare-row"><span class="compare-label">Obiettivo periodo</span><span class="compare-curr">' + eur(objRett) + '</span></div>' +
+    '<div class="compare-row"><span class="compare-label">Delta</span><span class="compare-curr" style="color:'+(consuntivo-objRett>=0?'var(--green)':'var(--red)')+'">'+((consuntivo-objRett>=0?'+':'')+eur(consuntivo-objRett))+'</span></div>' +
+    '</div>' +
+    '<div class="card"><div class="card-title">Consuntivo vs Obiettivo — ultime 12 settimane</div>' +
+    '<canvas id="chart-obj" height="200"></canvas>' +
+    '</div>';
+}
+
+
+// ── TAB: ARTICOLI ─────────────────────────────────────────────
+function buildArticoli() {
+  const curr = getPeriodRows(DATA.articoli.map(r=>({...r, data:r.data})), 0);
+  const prev = getPeriodRows(DATA.articoli.map(r=>({...r, data:r.data})), 1);
+
+  const aggrega = rows => {
+    const map={};
+    rows.forEach(r=>{
+      const k=r.desc.trim();
+      if(!map[k]) map[k]={desc:k,importo:0,qta:0};
+      map[k].importo+=num(r.importo);
+      map[k].qta+=num(r.qta);
+    });
+    return map;
+  };
+
+  const currMap = aggrega(curr);
+  const prevMap = aggrega(prev);
+
+  const top10 = Object.values(currMap).sort((a,b)=>b.importo-a.importo).slice(0,10);
+  const maxInc = top10[0]?.importo||1;
+  const labelCurr = getPeriodLabel(0);
+  const labelPrev = getPeriodLabel(1);
+
+  return `
+    <div class="card">
+      <div class="card-title">Top 10 articoli — ${labelCurr} vs ${labelPrev}</div>
+      ${top10.length===0 ? '<div style="color:var(--muted);text-align:center;padding:20px">Nessun dato per questo periodo</div>' :
+        top10.map((a,i)=>{
+          const p = prevMap[a.desc];
+          const d = p ? delta(a.importo, p.importo) : null;
+          return `<div class="art-row">
+            <div class="art-rank">${i+1}</div>
+            <div class="art-body">
+              <div class="art-header">
+                <span class="art-name">${a.desc}</span>
+                <div class="art-right">
+                  <span class="art-value">${eur(a.importo)}</span>
+                  <span style="color:var(--muted);font-size:11px">${Math.round(a.qta)} pz</span>
+                  ${d!==null?`<span class="kpi-delta ${d>=0?'pos':'neg'}">${d>=0?'▲':'▼'} ${Math.abs(d).toFixed(1)}%</span>`:'<span style="color:var(--muted);font-size:11px">nuovo</span>'}
+                </div>
+              </div>
+              <div class="art-bar-track">
+                <div class="art-bar-fill" style="width:${(a.importo/maxInc*100).toFixed(0)}%"></div>
+              </div>
+            </div>
+          </div>`;
+        }).join('')
+      }
+    </div>
+
+    <div class="card">
+      <div class="card-title">Articoli in calo — ${labelCurr} vs ${labelPrev}</div>
+      ${Object.values(currMap)
+        .filter(a=>prevMap[a.desc] && delta(a.importo,prevMap[a.desc].importo)<-5)
+        .sort((a,b)=>delta(a.importo,prevMap[a.desc].importo)-delta(b.importo,prevMap[b.desc].importo))
+        .slice(0,5)
+        .map(a=>{
+          const d=delta(a.importo,prevMap[a.desc].importo);
+          return `<div class="compare-row">
+            <span class="compare-label">${a.desc}</span>
+            <span class="compare-prev">${eur(prevMap[a.desc].importo)}</span>
+            <span class="compare-arrow">→</span>
+            <span class="compare-curr">${eur(a.importo)}</span>
+            <span class="kpi-delta neg">▼ ${Math.abs(d).toFixed(1)}%</span>
+          </div>`;
+        }).join('') || '<div style="color:var(--muted);text-align:center;padding:16px">Nessun articolo in calo significativo</div>'
+      }
+    </div>
+  `;
+}
+
+// ── TAB: TREND ────────────────────────────────────────────────
+function buildTrend() {
+  // Ultimi 8 mesi
+  const monthly = {};
+  DATA.riepilogo.forEach(r=>{
+    const d=parseDate(r.data); if(!d) return;
+    const key=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0');
+    if(!monthly[key]) monthly[key]={inc:0,cop:0};
+    monthly[key].inc+=r.incasso;
+    monthly[key].cop+=r.coperti;
+  });
+  const months = Object.keys(monthly).sort().slice(-8);
+  window._trendData = {months, monthly};
+
+  return `
+    <div class="card">
+      <div class="card-title">Andamento mensile — ultimi 8 mesi</div>
+      <canvas id="chart-monthly" height="200"></canvas>
+    </div>
+
+    <div class="card">
+      <div class="card-title">Coperti mensili</div>
+      <canvas id="chart-coperti" height="180"></canvas>
+    </div>
+  `;
+}
+
+
+
+// ── TAB: OGGI ────────────────────────────────────────────────
+function buildOggi() {
+  // Usa l ultimo giorno disponibile nel Riepilogo (non la data di sistema)
+  const dates = DATA.riepilogo.map(r => parseDate(r.data)).filter(Boolean).sort((a,b) => b-a);
+  const today = dates.length > 0 ? dates[0] : new Date();
+  const todayStr = today.toLocaleDateString('it-IT');
+
+  // Trova righe dell ultimo giorno disponibile
+  const righeOggi = DATA.riepilogo.filter(r => {
+    const d = parseDate(r.data);
+    if (!d) return false;
+    return d.getDate()===today.getDate() && d.getMonth()===today.getMonth() && d.getFullYear()===today.getFullYear();
+  });
+
+  // Trova articoli dell ultimo giorno disponibile
+  const artOggi = DATA.articoli.filter(r => {
+    const d = parseDate(r.data);
+    if (!d) return false;
+    return d.getDate()===today.getDate() && d.getMonth()===today.getMonth() && d.getFullYear()===today.getFullYear();
+  });
+
+  const incasso   = sumField(righeOggi, 'incasso');
+  const coperti   = sumField(righeOggi, 'coperti');
+  const sconMedio = coperti > 0 ? incasso/coperti : 0;
+  const tavoli    = sumField(righeOggi, 'tavoli');
+
+  // Top articoli oggi
+  const artMap = {};
+  artOggi.forEach(r => {
+    const k = r.desc.trim();
+    if (!artMap[k]) artMap[k] = {desc:k, importo:0, qta:0};
+    artMap[k].importo += num(r.importo);
+    artMap[k].qta     += num(r.qta);
+  });
+  const topArt = Object.values(artMap).sort((a,b)=>b.importo-a.importo).slice(0,10);
+  const maxInc = topArt[0]?.importo || 1;
+
+  const noDati = righeOggi.length === 0;
+
+  return (noDati ? '<div class="card" style="text-align:center;padding:40px"><div style="font-size:32px;margin-bottom:12px">🍽️</div><div style="color:var(--sub)">Nessun dato per oggi — i report arrivano dopo la chiusura cassa</div></div>' : '') +
+
+  '<div class="kpi-grid">' +
+  '<div class="kpi-card"><div class="kpi-label">Incasso ' + todayStr + '</div><div class="kpi-value gold">' + eur(incasso) + '</div></div>' +
+  '<div class="kpi-card"><div class="kpi-label">Coperti</div><div class="kpi-value blue">' + coperti + '</div></div>' +
+  '<div class="kpi-card"><div class="kpi-label">Scontrino medio</div><div class="kpi-value">' + eur(sconMedio) + '</div></div>' +
+  '<div class="kpi-card"><div class="kpi-label">Tavoli</div><div class="kpi-value">' + tavoli + '</div></div>' +
+  '</div>' +
+
+  '<div class="two-col">' +
+  '<div class="card"><div class="card-title">Categorie — oggi</div>' +
+  ['cucina','braceria','vini','dolci','bevande'].map(k => {
+    const v = sumField(righeOggi, k);
+    const pct = incasso > 0 ? (v/incasso*100).toFixed(0) : 0;
+    return '<div class="compare-row"><span class="compare-label">' + k.charAt(0).toUpperCase()+k.slice(1) + '</span>' +
+      '<div style="flex:1;margin:0 12px;height:4px;background:var(--border);border-radius:2px"><div style="height:100%;width:'+pct+'%;background:var(--gold);border-radius:2px"></div></div>' +
+      '<span class="compare-curr">' + eur(v) + '</span></div>';
+  }).join('') +
+  '</div>' +
+
+  '<div class="card"><div class="card-title">Top articoli — oggi</div>' +
+  (topArt.length === 0 ? '<div style="color:var(--muted);text-align:center;padding:20px">Nessun articolo</div>' :
+    topArt.map((a,i) => '<div class="art-row">' +
+      '<div class="art-rank">'+(i+1)+'</div>' +
+      '<div class="art-body"><div class="art-header">' +
+      '<span class="art-name">'+a.desc+'</span>' +
+      '<div class="art-right"><span class="art-value">'+eur(a.importo)+'</span>' +
+      '<span style="color:var(--muted);font-size:11px">'+Math.round(a.qta)+' pz</span></div></div>' +
+      '<div class="art-bar-track"><div class="art-bar-fill" style="width:'+(a.importo/maxInc*100).toFixed(0)+'%"></div></div>' +
+      '</div></div>'
+    ).join('')
+  ) + '</div></div>';
+}
+
+
+// ── TAB: ANNO ─────────────────────────────────────────────────
+function buildAnno() {
+  const now   = new Date();
+  const anno  = now.getFullYear();
+  const annoP = anno - 1;
+
+  // YTD corrente e anno precedente
+  const ytdCurr = DATA.riepilogo.filter(r => {
+    const d = parseDate(r.data);
+    return d && d.getFullYear() === anno;
+  });
+  const ytdPrev = DATA.riepilogo.filter(r => {
+    const d = parseDate(r.data);
+    if (!d || d.getFullYear() !== annoP) return false;
+    // Stesso periodo dell'anno: fino allo stesso giorno dell'anno
+    const doyNow  = Math.floor((now - new Date(anno,0,1))   / 86400000);
+    const doyPrev = Math.floor((d   - new Date(annoP,0,1))  / 86400000);
+    return doyPrev <= doyNow;
+  });
+
+  const incCurr = sumField(ytdCurr, 'incasso');
+  const incPrev = sumField(ytdPrev, 'incasso');
+  const copCurr = sumField(ytdCurr, 'coperti');
+  const dInc    = delta(incCurr, incPrev);
+  const dCop    = delta(copCurr, sumField(ytdPrev,'coperti'));
+
+  // Obiettivo annuale dal foglio Obiettivi
+  const objAnnuale = DATA.obiettivi.reduce((s,o) => s + (o.objTeorico||0), 0);
+  const percYTD    = objAnnuale > 0 ? Math.min(incCurr/objAnnuale*100, 150) : 0;
+  const colBar     = percYTD >= 100 ? 'var(--green)' : percYTD >= 70 ? 'var(--gold)' : 'var(--red)';
+
+  // Andamento mensile
+  const mesi = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
+  const mensileC = new Array(12).fill(0);
+  const mensileP = new Array(12).fill(0);
+  ytdCurr.forEach(r => { const d=parseDate(r.data); if(d) mensileC[d.getMonth()] += r.incasso; });
+  ytdPrev.forEach(r => { const d=parseDate(r.data); if(d) mensileP[d.getMonth()] += r.incasso; });
+
+  // Cumulato
+  const cumC = mensileC.map((v,i) => mensileC.slice(0,i+1).reduce((a,b)=>a+b,0));
+  const cumP = mensileP.map((v,i) => mensileP.slice(0,i+1).reduce((a,b)=>a+b,0));
+
+  window._annoData = { mesi, mensileC, mensileP, cumC, cumP, objAnnuale };
+
+  const meseCorrente = now.getMonth();
+  const labelsVisibili = mesi.slice(0, meseCorrente+1);
+
+  return '<div class="kpi-grid">' +
+    '<div class="kpi-card"><div class="kpi-label">Incasso YTD '+anno+'</div><div class="kpi-value gold">'+eur(incCurr)+'</div><div>'+deltaTag(dInc)+'<span class="kpi-sub">vs '+annoP+' stesso periodo</span></div></div>' +
+    '<div class="kpi-card"><div class="kpi-label">Coperti YTD</div><div class="kpi-value blue">'+copCurr+'</div><div>'+deltaTag(dCop)+'</div></div>' +
+    '<div class="kpi-card"><div class="kpi-label">Obiettivo annuale</div><div class="kpi-value">'+eur(objAnnuale)+'</div><div><span class="kpi-sub">breakeven</span></div></div>' +
+    '<div class="kpi-card"><div class="kpi-label">Gap al breakeven</div><div class="kpi-value" style="color:'+(objAnnuale-incCurr>0?'var(--red)':'var(--green)')+'">'+eur(Math.abs(objAnnuale-incCurr))+'</div><div><span class="kpi-sub">'+(objAnnuale-incCurr>0?'da recuperare':'surplus')+'</span></div></div>' +
+    '</div>' +
+
+    '<div class="card">' +
+    '<div style="display:flex;justify-content:space-between;margin-bottom:8px">' +
+    '<div class="card-title" style="margin:0">Avanzamento YTD vs Obiettivo annuale</div>' +
+    '<span style="font-family:\"JetBrains Mono\",monospace;font-size:20px;font-weight:600;color:'+colBar+'">'+percYTD.toFixed(1)+'%</span>' +
+    '</div>' +
+    '<div class="obj-bar-track"><div class="obj-bar-fill" style="width:'+Math.min(percYTD,100)+'%;background:'+colBar+'"></div></div>' +
+    '<div class="obj-labels"><span>€0</span><span>'+eur(objAnnuale)+'</span></div>' +
+    '</div>' +
+
+    '<div class="two-col">' +
+    '<div class="card"><div class="card-title">Incasso mensile — '+anno+' vs '+annoP+'</div><canvas id="chart-anno-mensile" height="220"></canvas></div>' +
+    '<div class="card"><div class="card-title">Cumulato YTD — '+anno+' vs '+annoP+'</div><canvas id="chart-anno-cum" height="220"></canvas></div>' +
+    '</div>';
+}
+
+
+// ── TAB: MENU ENGINEERING ─────────────────────────────────────
+let meCategoria = 'tutti';
+let mePeriodo   = 90;
+
+// Mappa articolo -> categoria (basata sui codici reparto)
+const CAT_MAP = {
+  cucina:   [1,2,3,6,7,9,28,179,208,209,210,211,214,215,449,800,1011,1052,481,166,283,377,206,207],
+  braceria: [16],
+  vini:     [12,14,15,342,343],
+  dolci:    [8],
+  bevande:  [18,25,26,35,528,550,569]
+};
+
+function getCategoriaPiatto(codice) {
+  const c = parseInt(codice);
+  if (isNaN(c)) return 'altro';
+  for (const [cat, codes] of Object.entries(CAT_MAP)) {
+    if (codes.includes(c)) return cat;
+  }
+  // Fallback sul nome articolo
+  return 'altro';
+}
+
+function buildMenuEngineering() {
+  const cats = ['tutti','cucina','braceria','vini','dolci','bevande'];
+  const catLabels = {tutti:'Tutti',cucina:'Cucina',braceria:'Braceria',vini:'Vini',dolci:'Dolci',bevande:'Bevande'};
+
+  // Build controls with safe HTML (no nested quotes)
+  let controlsHtml = '<div class="me-controls">';
+  cats.forEach(function(c) {
+    const active = meCategoria===c ? ' active' : '';
+    controlsHtml += '<button class="me-filter-btn'+active+'" data-cat="'+c+'" onclick="setMeCat(this.dataset.cat)">'+catLabels[c]+'</button>';
+  });
+  controlsHtml += '<div class="me-period"><label>Periodo</label><select id="meperiodo" onchange="setMePeriodo(parseInt(this.value))">';
+  [30,60,90,180,365].forEach(function(d) {
+    const sel = mePeriodo===d ? ' selected' : '';
+    const lbl = d===365?'Anno':d===180?'6 mesi':d+' giorni';
+    controlsHtml += '<option value="'+d+'"'+sel+'>'+lbl+'</option>';
+  });
+  controlsHtml += '</select></div></div>';
+  const controls = controlsHtml;
+
+  // Filtra articoli per periodo
+  const cutoff = new Date();
+  cutoff.setDate(cutoff.getDate() - mePeriodo);
+
+  const artFiltrati = DATA.articoli.filter(r => {
+    const d = parseDate(r.data);
+    return d && d >= cutoff && r.desc && num(r.importo) > 0;
+  });
+
+  if (artFiltrati.length === 0) {
+    return controls + '<div style="color:var(--muted);text-align:center;padding:40px">Nessun dato — carica prima il tab Articoli</div>';
+  }
+
+  // Aggrega per articolo
+  const aggr = {};
+  artFiltrati.forEach(r => {
+    const k = r.desc.trim();
+    if (!aggr[k]) aggr[k] = { desc:k, codice:r.codice, qta:0, incasso:0, giorni: new Set() };
+    aggr[k].qta     += num(r.qta);
+    aggr[k].incasso += num(r.importo);
+    const d = parseDate(r.data);
+    if (d) aggr[k].giorni.add(r.data);
+  });
+
+  let articoli = Object.values(aggr);
+
+  // Filtra per categoria usando il nome dell'articolo come fallback
+  if (meCategoria !== 'tutti') {
+    // Prima prova a filtrare per codice, poi per nome
+    const catKeywords = {
+      cucina:   ['antipast','focacc','salum','prim','second','contorn','cruderi','insalat','patate','verdur','cotoletta','filetto','bun','tagliere','parmigian','pure'],
+      braceria: ['bracer','grill','ribeye','bistecca','tagliata','scottona','tomahawk','entrecote'],
+      vini:     ['vino','calice','bollicin','champagne','prosecco','spumante','rosso','bianco','rose'],
+      dolci:    ['dolci','tirami','browni','cake','fondente','millefoglie'],
+      bevande:  ['caffe','acqua','coca','birra','drink','cocktail','spritz','bibite','succo','the']
+    };
+    const keywords = catKeywords[meCategoria] || [];
+    articoli = articoli.filter(a => {
+      const nome = a.desc.toLowerCase();
+      return keywords.some(kw => nome.includes(kw));
+    });
+  }
+
+  if (articoli.length === 0) {
+    return controls + '<div style="color:var(--muted);text-align:center;padding:40px">Nessun articolo trovato per questa categoria</div>';
+  }
+
+  // Calcola medie per soglie quadranti
+  const mediaQta     = articoli.reduce((s,a)=>s+a.qta,0)     / articoli.length;
+  const mediaIncasso = articoli.reduce((s,a)=>s+a.incasso,0) / articoli.length;
+
+  // Assegna quadrante
+  articoli.forEach(a => {
+    const altaQta     = a.qta     >= mediaQta;
+    const altaIncasso = a.incasso >= mediaIncasso;
+    if (altaQta && altaIncasso)  a.quadrante = 'star';
+    else if (altaQta)            a.quadrante = 'plow';
+    else if (altaIncasso)        a.quadrante = 'puzzle';
+    else                         a.quadrante = 'dog';
+  });
+
+  // Ordina: prima per quadrante, poi per incasso desc
+  const ordineQ = {star:0, puzzle:1, plow:2, dog:3};
+  articoli.sort((a,b) => ordineQ[a.quadrante]-ordineQ[b.quadrante] || b.incasso-a.incasso);
+
+  const qLabel = {
+    star:   '⭐ Star',
+    plow:   '🐴 Plow Horse',
+    puzzle: '❓ Puzzle',
+    dog:    '🐕 Dog'
+  };
+  const qDesc = {
+    star:   'Alta popolarità, alto incasso → spingere, mettere in evidenza',
+    plow:   'Alta popolarità, basso incasso → valutare aumento prezzo',
+    puzzle: 'Bassa popolarità, alto incasso → migliorare visibilità e posizione nel menu',
+    dog:    'Bassa popolarità, basso incasso → valutare eliminazione o restyling'
+  };
+
+  const legend =
+    '<div class="me-legend">' +
+    ['star','puzzle','plow','dog'].map(q =>
+      '<div class="me-legend-item '+q+'">' +
+      '<div class="me-legend-title">'+qLabel[q]+'</div>' +
+      '<div class="me-legend-desc">'+qDesc[q]+'</div>' +
+      '</div>'
+    ).join('') +
+    '</div>';
+
+  // Soglie visibili
+  const soglie =
+    '<div style="color:var(--muted);font-size:11px;margin-bottom:16px">' +
+    'Soglie periodo ('+mePeriodo+'gg): ' +
+    'Quantità media: <span style="color:var(--text)">'+Math.round(mediaQta)+' pz</span> · ' +
+    'Incasso medio: <span style="color:var(--text)">'+eur(mediaIncasso)+'</span>' +
+    (true ? ' · <span style="font-style:italic">Food cost: non disponibile — verrà usato quando caricato</span>' : '') +
+    '</div>';
+
+  // Tabella
+  const header =
+    '<table class="me-table">' +
+    '<thead><tr>' +
+    '<th>Articolo</th>' +
+    '<th style="text-align:right">Quantità</th>' +
+    '<th style="text-align:right">Incasso</th>' +
+    '<th style="text-align:right">Incasso/pz</th>' +
+    '<th style="text-align:right;color:var(--muted)">Food Cost*</th>' +
+    '<th>Quadrante</th>' +
+    '<th>Azione suggerita</th>' +
+    '</tr></thead><tbody>';
+
+  const azioni = {
+    star:   'Mantieni visibilità alta, non cambiare prezzo',
+    plow:   'Testa aumento prezzo del 5-10%',
+    puzzle: 'Sposta in posizione più visibile nel menu',
+    dog:    'Valuta eliminazione o rebranding'
+  };
+
+  const rows = articoli.map(a =>
+    '<tr>' +
+    '<td><strong>'+a.desc+'</strong></td>' +
+    '<td style="text-align:right;font-family:\"JetBrains Mono\",monospace">'+Math.round(a.qta)+'</td>' +
+    '<td style="text-align:right;font-family:\"JetBrains Mono\",monospace;color:var(--gold)">'+eur(a.incasso)+'</td>' +
+    '<td style="text-align:right;font-family:\"JetBrains Mono\",monospace">'+eur(a.incasso/Math.max(a.qta,1))+'</td>' +
+    '<td style="text-align:right;color:var(--muted)">—</td>' +
+    '<td><span class="quadrant-badge q-'+a.quadrante+'">'+qLabel[a.quadrante]+'</span></td>' +
+    '<td style="color:var(--sub);font-size:12px">'+azioni[a.quadrante]+'</td>' +
+    '</tr>'
+  ).join('');
+
+  const footer = "<tr><td colspan=\"7\" class=\"foodcost-note\">* Food cost: quando disponibile sostituirà l'incasso come metrica di redditività</td></tr>";
+
+  return controls + legend + soglie +
+    '<div class="card" style="padding:0;overflow:hidden">' +
+    '<div style="overflow-x:auto">' +
+    header + rows + footer + '</tbody></table></div></div>';
+}
+
+function setMeCat(cat) {
+  meCategoria = cat;
+  document.getElementById('main-content').innerHTML = buildMenuEngineering();
+}
+
+function setMePeriodo(val) {
+  mePeriodo = parseInt(val);
+  document.getElementById('main-content').innerHTML = buildMenuEngineering();
+}
+
+
+// ── TAB: BEP ─────────────────────────────────────────────────
+function buildBEP() {
+  // Legge i dati dal foglio Costi_BEP
+  // Struttura: col A = voce, col B = importo
+  const raw = DATA.costiBEP;
+
+  // Estrai valori per nome voce
+  function getVal(label) {
+    for (const r of raw) {
+      const a = String(r['A'] || r[Object.keys(r)[0]] || '').trim().toLowerCase();
+      const b = num(r['B'] || r[Object.keys(r)[1]] || 0);
+      if (a.includes(label.toLowerCase()) && b > 0) return b;
+    }
+    return 0;
+  }
+
+  // Costi fissi mensili dal foglio
+  const affitto      = getVal('affitto');
+  const personale    = getVal('personale');
+  const utenze       = getVal('utenze');
+  const assicurazioni = getVal('assicurazioni');
+  const consulenze   = getVal('commercialista') || getVal('consulenze');
+  const altreFisse   = getVal('altre spese fisse') || getVal('altre spese');
+  const totaleFisso  = affitto + personale + utenze + assicurazioni + consulenze + altreFisse;
+
+  // Costi variabili % dal foglio
+  const foodCostPct  = getVal('food cost') || 28;
+  const bevCostPct   = getVal('beverage') || 32;
+  const altreVarPct  = getVal('altre %') || 4;
+  const totVarPct    = foodCostPct + bevCostPct + altreVarPct;
+  const margContrib  = 100 - totVarPct;
+
+  // Costi serate
+  const nserate      = getVal('n° serate') || getVal('serate previste') || 4;
+  const djSerata     = getVal('dj') || getVal('musicist') || 200;
+  const siae         = getVal('siae') || 90;
+  const facchinaggio = getVal('facchinaggio') || 0;
+  const promozione   = getVal('promozione') || getVal('social') || 150;
+  const totSerate    = nserate * (djSerata + siae + facchinaggio + promozione);
+
+  // Imposte
+  const ires         = getVal('ires') || 0;
+  const irap         = getVal('irap') || 0;
+  const crediti      = getVal('crediti') || 0;
+  const imposteMensili = (ires + irap + crediti) / 12;
+
+  const totaleCostiMensili = totaleFisso + totSerate + imposteMensili;
+
+  // BEP = Costi fissi / Margine di contribuzione
+  const bepMensile  = margContrib > 0 ? (totaleCostiMensili / (margContrib / 100)) : 0;
+  const bepAnnuale  = bepMensile * 12;
+
+  // Dati reali dal Riepilogo — periodo selezionato
+  const curr = getPeriodRows(DATA.riepilogo, 0);
+  const incassoPeriodo = sumField(curr, 'incasso');
+  const copertiPeriodo = sumField(curr, 'coperti');
+
+  // YTD 2026
+  const now = new Date();
+  const ytd = DATA.riepilogo.filter(r => {
+    const d = parseDate(r.data);
+    return d && d.getFullYear() === now.getFullYear();
+  });
+  const incassoYTD  = sumField(ytd, 'incasso');
+  const mesiPassati = now.getMonth() + 1;
+  const proiezioneAnnuale = mesiPassati > 0 ? incassoYTD / mesiPassati * 12 : 0;
+
+  // Food cost reale: F&B / incasso
+  const foodReale   = sumField(curr, 'cucina') + sumField(curr, 'dolci');
+  const bevReale    = sumField(curr, 'vini') + sumField(curr, 'bevande') + sumField(curr, 'braceria');
+  const foodCostReale = incassoPeriodo > 0 ? foodReale / incassoPeriodo * 100 : 0;
+  const bevCostReale  = incassoPeriodo > 0 ? bevReale  / incassoPeriodo * 100 : 0;
+
+  // Gap BEP
+  const gapMensile = incassoPeriodo - bepMensile;
+  const colGap     = gapMensile >= 0 ? 'var(--green)' : 'var(--red)';
+  const percBEP    = bepMensile > 0 ? Math.min(incassoPeriodo / bepMensile * 100, 150) : 0;
+  const colBar     = percBEP >= 100 ? 'var(--green)' : percBEP >= 80 ? 'var(--gold)' : 'var(--red)';
+
+  const labelPeriodo = getPeriodLabel(0);
+
+  return '<div class="kpi-grid">' +
+    '<div class="kpi-card"><div class="kpi-label">BEP mensile</div><div class="kpi-value gold">' + eur(bepMensile) + '</div><div><span class="kpi-sub">punto di pareggio</span></div></div>' +
+    '<div class="kpi-card"><div class="kpi-label">BEP annuale</div><div class="kpi-value">' + eur(bepAnnuale) + '</div><div><span class="kpi-sub">obiettivo minimo</span></div></div>' +
+    '<div class="kpi-card"><div class="kpi-label">Incasso ' + labelPeriodo + '</div><div class="kpi-value" style="color:' + colGap + '">' + eur(incassoPeriodo) + '</div><div><span class="kpi-sub ' + (gapMensile>=0?'pos':'neg') + '">' + (gapMensile>=0?'+':'')+eur(gapMensile) + ' vs BEP</span></div></div>' +
+    '<div class="kpi-card"><div class="kpi-label">Proiezione annuale</div><div class="kpi-value">' + eur(proiezioneAnnuale) + '</div><div><span class="kpi-sub">basata su YTD</span></div></div>' +
+    '</div>' +
+
+    '<div class="card">' +
+    '<div style="display:flex;justify-content:space-between;margin-bottom:8px">' +
+    '<div class="card-title" style="margin:0">Copertura BEP — ' + labelPeriodo + '</div>' +
+    '<span style="font-size:20px;font-weight:700;color:' + colBar + '">' + percBEP.toFixed(1) + '%</span>' +
+    '</div>' +
+    '<div class="obj-bar-track"><div class="obj-bar-fill" style="width:' + Math.min(percBEP,100) + '%;background:' + colBar + '"></div></div>' +
+    '<div class="obj-labels"><span>€0</span><span>' + eur(bepMensile) + '</span></div>' +
+    '</div>' +
+
+    '<div class="two-col">' +
+    '<div class="card"><div class="card-title">Struttura costi mensili</div>' +
+    [
+      ['Affitto / leasing', affitto],
+      ['Personale', personale],
+      ['Utenze', utenze],
+      ['Consulenze', consulenze],
+      ['Serate / intrattenimento', totSerate],
+      ['Assicurazioni', assicurazioni],
+      ['Altre spese fisse', altreFisse],
+    ].filter(r => r[1] > 0).map(r =>
+      '<div class="compare-row"><span class="compare-label">' + r[0] + '</span>' +
+      '<span class="compare-curr">' + eur(r[1]) + '</span>' +
+      '<span class="kpi-sub" style="margin-left:8px">' + (totaleFisso>0?(r[1]/totaleCostiMensili*100).toFixed(1)+'%':'') + '</span></div>'
+    ).join('') +
+    '<div class="compare-row" style="border-top:1px solid var(--border);margin-top:8px;padding-top:8px">' +
+    '<span class="compare-label" style="font-weight:700">Totale costi mensili</span>' +
+    '<span class="compare-curr" style="font-weight:700">' + eur(totaleCostiMensili) + '</span></div>' +
+    '</div>' +
+
+    '<div class="card"><div class="card-title">Margine di contribuzione</div>' +
+    '<div class="compare-row"><span class="compare-label">Food cost %</span>' +
+    '<span class="compare-curr">' + foodCostPct.toFixed(0) + '%</span>' +
+    '<span class="kpi-sub" style="margin-left:8px">reale: ' + foodCostReale.toFixed(1) + '%</span></div>' +
+    '<div class="compare-row"><span class="compare-label">Beverage cost %</span>' +
+    '<span class="compare-curr">' + bevCostPct.toFixed(0) + '%</span>' +
+    '<span class="kpi-sub" style="margin-left:8px">reale: ' + bevCostReale.toFixed(1) + '%</span></div>' +
+    '<div class="compare-row"><span class="compare-label">Altre % variabili</span>' +
+    '<span class="compare-curr">' + altreVarPct.toFixed(0) + '%</span></div>' +
+    '<div class="compare-row" style="border-top:1px solid var(--border);margin-top:8px;padding-top:8px">' +
+    '<span class="compare-label" style="font-weight:700">Margine contribuzione</span>' +
+    '<span class="compare-curr" style="font-weight:700;color:var(--green)">' + margContrib.toFixed(0) + '%</span></div>' +
+    '</div></div>' +
+
+    '<div class="card"><div class="card-title">Dati YTD ' + now.getFullYear() + '</div>' +
+    '<div class="compare-row"><span class="compare-label">Incasso YTD</span><span class="compare-curr">' + eur(incassoYTD) + '</span></div>' +
+    '<div class="compare-row"><span class="compare-label">Proiezione a fine anno</span><span class="compare-curr">' + eur(proiezioneAnnuale) + '</span></div>' +
+    '<div class="compare-row"><span class="compare-label">BEP annuale</span><span class="compare-curr">' + eur(bepAnnuale) + '</span></div>' +
+    '<div class="compare-row"><span class="compare-label">Gap proiezione vs BEP</span>' +
+    '<span class="compare-curr" style="color:' + (proiezioneAnnuale>=bepAnnuale?'var(--green)':'var(--red)') + '">' +
+    (proiezioneAnnuale>=bepAnnuale?'+':'') + eur(proiezioneAnnuale - bepAnnuale) + '</span></div>' +
+    '</div>';
+}
+
+// ── TAB: PERSONALIZZATO ───────────────────────────────────────
+let customRange = { curr: null, prev: null };
+
+function buildCustom() {
+  const today = new Date();
+  const fmt = d => d.toISOString().split('T')[0];
+  const mondayThis = new Date(today); mondayThis.setDate(today.getDate()-(today.getDay()||7)+1);
+  const sundayThis = new Date(mondayThis); sundayThis.setDate(mondayThis.getDate()+6);
+  const mondayPrev = new Date(mondayThis); mondayPrev.setDate(mondayThis.getDate()-7);
+  const sundayPrev = new Date(sundayThis); sundayPrev.setDate(sundayThis.getDate()-7);
+
+  const defC1 = customRange.curr ? customRange.curr.start : fmt(mondayThis);
+  const defC2 = customRange.curr ? customRange.curr.end   : fmt(sundayThis);
+  const defP1 = customRange.prev ? customRange.prev.start : fmt(mondayPrev);
+  const defP2 = customRange.prev ? customRange.prev.end   : fmt(sundayPrev);
+
+  const curr    = customRange.curr ? getCustomRows(DATA.riepilogo, customRange.curr) : [];
+  const prev    = customRange.prev ? getCustomRows(DATA.riepilogo, customRange.prev) : [];
+  const currArt = customRange.curr ? getCustomRows(DATA.articoli,  customRange.curr) : [];
+  const prevArt = customRange.prev ? getCustomRows(DATA.articoli,  customRange.prev) : [];
+
+  const totC  = {inc:sumField(curr,'incasso'), cop:sumField(curr,'coperti')};
+  const totP  = {inc:sumField(prev,'incasso'), cop:sumField(prev,'coperti')};
+  const dInc  = delta(totC.inc, totP.inc);
+  const dCop  = delta(totC.cop, totP.cop);
+  const sconC = totC.cop>0 ? totC.inc/totC.cop : 0;
+  const sconP = totP.cop>0 ? totP.inc/totP.cop : 0;
+
+  const aggArt = rows => {
+    const map={};
+    rows.forEach(r=>{
+      const k=r.desc.trim();
+      if(!map[k]) map[k]={desc:k,importo:0,qta:0};
+      map[k].importo+=num(r.importo); map[k].qta+=num(r.qta);
+    });
+    return map;
+  };
+  const currArtMap = aggArt(currArt);
+  const prevArtMap = aggArt(prevArt);
+  const top10  = Object.values(currArtMap).sort((a,b)=>b.importo-a.importo).slice(0,10);
+  const maxInc = top10[0]?.importo||1;
+  const labelC = customRange.curr ? customRange.curr.start+' → '+customRange.curr.end : 'Periodo A';
+  const labelP = customRange.prev ? customRange.prev.start+' → '+customRange.prev.end : 'Periodo B';
+
+  window._customData = { curr, prev, labelC, labelP };
+
+  const pickerHtml =
+    '<div class="date-picker-row">' +
+    '<label>Periodo A</label>' +
+    '<input type="date" id="curr-start" value="'+defC1+'">' +
+    '<span class="sep">—</span>' +
+    '<input type="date" id="curr-end" value="'+defC2+'">' +
+    '<span class="sep" style="margin:0 8px">vs</span>' +
+    '<label>Periodo B</label>' +
+    '<input type="date" id="prev-start" value="'+defP1+'">' +
+    '<span class="sep">—</span>' +
+    '<input type="date" id="prev-end" value="'+defP2+'">' +
+    '<button class="apply-btn" onclick="applyCustomRange()">Applica</button>' +
+    '</div>';
+
+  if (curr.length === 0) return pickerHtml + '<div style="color:var(--muted);text-align:center;padding:40px">Seleziona un periodo e clicca Applica</div>';
+
+  const kpiHtml =
+    '<div class="kpi-grid">' +
+    '<div class="kpi-card"><div class="kpi-label">Incasso — Periodo A</div><div class="kpi-value gold">'+eur(totC.inc)+'</div><div>'+deltaTag(dInc)+'<span class="kpi-sub">vs Periodo B</span></div></div>' +
+    '<div class="kpi-card"><div class="kpi-label">Coperti</div><div class="kpi-value blue">'+totC.cop+'</div><div>'+deltaTag(dCop)+'</div></div>' +
+    '<div class="kpi-card"><div class="kpi-label">Scontrino medio</div><div class="kpi-value">'+eur(sconC)+'</div><div>'+deltaTag(delta(sconC,sconP))+'</div></div>' +
+    '<div class="kpi-card"><div class="kpi-label">Incasso — Periodo B</div><div class="kpi-value" style="color:var(--sub)">'+eur(totP.inc)+'</div><div><span class="kpi-sub">'+totP.cop+' coperti</span></div></div>' +
+    '</div>';
+
+  const chartsHtml =
+    '<div class="two-col">' +
+    '<div class="card"><div class="card-title">Incasso giornaliero — A vs B</div><canvas id="chart-custom" height="220"></canvas></div>' +
+    '<div class="card"><div class="card-title">Categorie — A vs B</div><canvas id="chart-custom-cat" height="220"></canvas></div>' +
+    '</div>';
+
+  let artRows = '';
+  top10.forEach(function(a, i) {
+    const p = prevArtMap[a.desc];
+    const d = p ? delta(a.importo, p.importo) : null;
+    const dTag = d !== null
+      ? '<span class="kpi-delta '+(d>=0?'pos':'neg')+'">'+(d>=0?'▲':'▼')+' '+Math.abs(d).toFixed(1)+'%</span>'
+      : '<span style="color:var(--muted);font-size:11px">nuovo</span>';
+    const barW = (a.importo/maxInc*100).toFixed(0);
+    artRows +=
+      '<div class="art-row">' +
+      '<div class="art-rank">'+(i+1)+'</div>' +
+      '<div class="art-body">' +
+      '<div class="art-header">' +
+      '<span class="art-name">'+a.desc+'</span>' +
+      '<div class="art-right">' +
+      '<span class="art-value">'+eur(a.importo)+'</span>' +
+      '<span style="color:var(--muted);font-size:11px">'+Math.round(a.qta)+' pz</span>' +
+      dTag +
+      '</div></div>' +
+      '<div class="art-bar-track"><div class="art-bar-fill" style="width:'+barW+'%"></div></div>' +
+      '</div></div>';
+  });
+
+  const artHtml = '<div class="card"><div class="card-title">Top 10 articoli — Periodo A vs B</div>' + artRows + '</div>';
+
+  return pickerHtml + kpiHtml + chartsHtml + artHtml;
+}
+
+function getCustomRows(rows, range) {
+  if (!range) return [];
+  const start = new Date(range.start);
+  const end   = new Date(range.end);
+  end.setHours(23,59,59);
+  return rows.filter(r=>{
+    const d=parseDate(r.data); if(!d) return false;
+    return d>=start && d<=end;
+  });
+}
+
+function applyCustomRange() {
+  customRange.curr = { start: document.getElementById('curr-start').value, end: document.getElementById('curr-end').value };
+  customRange.prev = { start: document.getElementById('prev-start').value, end: document.getElementById('prev-end').value };
+  renderTab();
+}
+
+function getCustomRows(rows, range) {
+  if (!range) return [];
+  const start = new Date(range.start);
+  const end   = new Date(range.end);
+  end.setHours(23,59,59);
+  return rows.filter(r=>{
+    const d=parseDate(r.data); if(!d) return false;
+    return d>=start && d<=end;
+  });
+}
+
+function applyCustomRange() {
+  customRange.curr = {
+    start: document.getElementById('curr-start').value,
+    end:   document.getElementById('curr-end').value,
+  };
+  customRange.prev = {
+    start: document.getElementById('prev-start').value,
+    end:   document.getElementById('prev-end').value,
+  };
+  renderTab();
+}
+
+// ── Charts ────────────────────────────────────────────────────
+const C = {
+  grid:'#e0ddd5', gold:'#a07830', goldFill:'rgba(160,120,48,0.1)',
+  muted:'#9a9080', green:'#2d7a4f', red:'#c0392b',
+  cats:['#a07830','#c05020','#6040b0','#208070','#2c5fb3'],
+};
+
+const scaleDefaults = {
+  x: { grid:{color:C.grid}, ticks:{color:C.muted,font:{size:10}}, border:{color:C.grid} },
+  y: { grid:{color:C.grid}, ticks:{color:C.muted,font:{size:10}, callback:v=>'€'+Math.round(v/1000)+'k'}, border:{color:C.grid} }
+};
+
+function renderCharts() {
+  Object.values(CHARTS).forEach(c=>c.destroy());
+  CHARTS={};
+
+  if (currentTab==='overview' && window._overviewData) {
+    const {chartDays,chartCurr,chartPrev,curr,labelCurr,labelPrev} = window._overviewData;
+    const oc = document.getElementById('chart-overview');
+    if (oc) CHARTS.overview = new Chart(oc, {
+      type:'bar',
+      data:{
+        labels:chartDays,
+        datasets:[
+          {label:labelPrev, data:chartPrev, backgroundColor:C.muted+'60', borderRadius:4},
+          {label:labelCurr, data:chartCurr, backgroundColor:C.gold,       borderRadius:4},
+        ]
+      },
+      options:{responsive:true, plugins:{legend:{display:true,labels:{color:C.muted,font:{size:11}}}}, scales:scaleDefaults}
+    });
+
+    const cc = document.getElementById('chart-cat');
+    if (cc) {
+      const cats=['cucina','braceria','vini','dolci','bevande'];
+      const labels=['Cucina','Braceria','Vini','Dolci','Bevande'];
+      CHARTS.cat = new Chart(cc, {
+        type:'bar',
+        data:{labels, datasets:[{data:cats.map(k=>sumField(curr,k)), backgroundColor:C.cats, borderRadius:4}]},
+        options:{responsive:true, plugins:{legend:{display:false}}, scales:scaleDefaults}
+      });
+    }
+  }
+
+  if (currentTab==='obiettivo' && window._objData) {
+    const {last12} = window._objData;
+    const oc = document.getElementById('chart-obj');
+    if (oc) CHARTS.obj = new Chart(oc, {
+      type:'bar',
+      data:{
+        labels:last12.map(o=>'S'+o.sett),
+        datasets:[
+          {label:'Obiettivo', data:last12.map(o=>o.objRett),    backgroundColor:C.muted+'50', borderRadius:3},
+          {label:'Consuntivo',data:last12.map(o=>o.consuntivo), backgroundColor:C.gold,       borderRadius:3},
+        ]
+      },
+      options:{responsive:true, plugins:{legend:{display:true,labels:{color:C.muted,font:{size:11}}}}, scales:scaleDefaults}
+    });
+  }
+
+  if (currentTab==='trend' && window._trendData) {
+    const {months,monthly} = window._trendData;
+    const mNames=['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
+    const labels = months.map(m=>{const[y,mo]=m.split('-'); return mNames[+mo-1]+' '+y.slice(2);});
+
+    const mc = document.getElementById('chart-monthly');
+    if (mc) CHARTS.monthly = new Chart(mc, {
+      type:'line',
+      data:{labels, datasets:[{
+        data:months.map(m=>monthly[m].inc||0),
+        borderColor:C.gold, backgroundColor:C.goldFill,
+        fill:true, tension:0.4, pointBackgroundColor:C.gold, pointRadius:4,
+      }]},
+      options:{responsive:true, plugins:{legend:{display:false}}, scales:scaleDefaults}
+    });
+
+    const cc = document.getElementById('chart-coperti');
+    if (cc) CHARTS.coperti = new Chart(cc, {
+      type:'bar',
+      data:{labels, datasets:[{
+        data:months.map(m=>monthly[m].cop||0),
+        backgroundColor:C.cats[4], borderRadius:4,
+      }]},
+      options:{responsive:true, plugins:{legend:{display:false}},
+        scales:{
+          x:{grid:{color:C.grid},ticks:{color:C.muted,font:{size:10}}},
+          y:{grid:{color:C.grid},ticks:{color:C.muted,font:{size:10}}}
+        }
+      }
+    });
+  }
+
+  if (currentTab==='anno' && window._annoData) {
+    const {mesi, mensileC, mensileP, cumC, cumP, objAnnuale} = window._annoData;
+    const now = new Date();
+    const labels = mesi.slice(0, now.getMonth()+1);
+
+    const mc = document.getElementById('chart-anno-mensile');
+    if (mc) CHARTS.annoMensile = new Chart(mc, {
+      type:'bar',
+      data:{labels, datasets:[
+        {label:String(now.getFullYear()-1), data:mensileP.slice(0,now.getMonth()+1), backgroundColor:C.muted+'60', borderRadius:4},
+        {label:String(now.getFullYear()),   data:mensileC.slice(0,now.getMonth()+1), backgroundColor:C.gold,       borderRadius:4},
+      ]},
+      options:{responsive:true, plugins:{legend:{display:true,labels:{color:C.muted,font:{size:11}}}}, scales:scaleDefaults}
+    });
+
+    const cc = document.getElementById('chart-anno-cum');
+    if (cc) {
+      const objMensile = objAnnuale > 0 ? labels.map((_,i) => objAnnuale/12*(i+1)) : [];
+      CHARTS.annoCum = new Chart(cc, {
+        type:'line',
+        data:{labels, datasets:[
+          {label:'Obiettivo', data:objMensile, borderColor:C.muted, borderDash:[5,4], borderWidth:1.5, pointRadius:0, fill:false},
+          {label:String(now.getFullYear()-1), data:cumP.slice(0,now.getMonth()+1), borderColor:C.muted+'80', borderWidth:2, pointRadius:0, fill:false},
+          {label:String(now.getFullYear()),   data:cumC.slice(0,now.getMonth()+1), borderColor:C.gold, backgroundColor:C.goldFill, borderWidth:2.5, pointBackgroundColor:C.gold, pointRadius:3, fill:true},
+        ]},
+        options:{responsive:true, plugins:{legend:{display:true,labels:{color:C.muted,font:{size:11}}}}, scales:scaleDefaults}
+      });
+    }
+  }
+
+    if (currentTab==='custom' && window._customData) {
+    const {curr,prev,labelC,labelP} = window._customData;
+    const cDays = curr.map(r=>{const d=parseDate(r.data);return d?`${d.getDate()}/${d.getMonth()+1}`:r.data;});
+    const pDays = prev.map(r=>{const d=parseDate(r.data);return d?`${d.getDate()}/${d.getMonth()+1}`:r.data;});
+    const allDays = [...new Set([...cDays,...pDays])].sort();
+    const cByDay = allDays.map(d=>{ const r=curr.find(r=>{const dd=parseDate(r.data);return dd&&`${dd.getDate()}/${dd.getMonth()+1}`===d;}); return r?r.incasso:0; });
+    const pByDay = allDays.map(d=>{ const r=prev.find(r=>{const dd=parseDate(r.data);return dd&&`${dd.getDate()}/${dd.getMonth()+1}`===d;}); return r?r.incasso:0; });
+
+    const cc = document.getElementById('chart-custom');
+    if (cc) CHARTS.custom = new Chart(cc, {
+      type:'bar',
+      data:{labels:allDays,datasets:[
+        {label:labelP,data:pByDay,backgroundColor:C.muted+'60',borderRadius:4},
+        {label:labelC,data:cByDay,backgroundColor:C.gold,borderRadius:4},
+      ]},
+      options:{responsive:true,plugins:{legend:{display:true,labels:{color:C.muted,font:{size:11}}}},scales:scaleDefaults}
+    });
+
+    const catc = document.getElementById('chart-custom-cat');
+    if (catc) {
+      const cats=['cucina','braceria','vini','dolci','bevande'];
+      const labels=['Cucina','Braceria','Vini','Dolci','Bevande'];
+      CHARTS.customCat = new Chart(catc, {
+        type:'bar',
+        data:{labels,datasets:[
+          {label:labelP,data:cats.map(k=>sumField(prev,k)),backgroundColor:C.muted+'60',borderRadius:4},
+          {label:labelC,data:cats.map(k=>sumField(curr,k)),backgroundColor:C.gold,borderRadius:4},
+        ]},
+        options:{responsive:true,plugins:{legend:{display:true,labels:{color:C.muted,font:{size:11}}}},scales:scaleDefaults}
+      });
+    }
+  }
+}
+
+// ── Fetch ─────────────────────────────────────────────────────
+async function fetchSheet(sheetName) {
+  try {
+    const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(sheetName)}`;
+    const resp = await fetch(url);
+    const text = await resp.text();
+    const match = text.match(/google\.visualization\.Query\.setResponse\(([\s\S]*)\)/);
+    if (!match) return [];
+    const json = JSON.parse(match[1]);
+    if (!json.table||!json.table.cols) return [];
+    const cols = json.table.cols.map(c=>c.label||c.id||'');
+    return (json.table.rows||[]).map(row=>{
+      const obj={};
+      cols.forEach((col,i)=>{
+        const cell=row.c?row.c[i]:null;
+        obj[col]=cell?(cell.v!==null&&cell.v!==undefined?cell.v:''):'';
+      });
+      return obj;
+    });
+  } catch(e) { console.error('fetchSheet',sheetName,e); return []; }
+}
+
+function parseRiepilogo(rows) {
+  return rows.map(r=>({
+    data:      r['Data']||'',
+    incasso:   num(r['Incasso €']||0),
+    coperti:   num(r['Coperti']||0),
+    sconMedio: num(r['Scontrino Medio €']||0),
+    cucina:    num(r['Cucina €']||0),
+    braceria:  num(r['Braceria €']||0),
+    vini:      num(r['Vini €']||0),
+    dolci:     num(r['Dolci €']||0),
+    bevande:   num(r['Bevande €']||0),
+    scontrino: num(r['Scontrino']||0),
+    credito:   num(r['Credito']||0),
+    altro:     num(r['Altro']||0),
+    tavoli:    num(r['Tavoli']||0),
+  })).filter(r=>r.incasso>0||r.coperti>0);
+}
+
+function parseArticoli(rows) {
+  return rows.map(r=>({
+    data:    r['Data']||'',
+    codice:  r['Codice']||'',
+    desc:    r['Descrizione']||'',
+    qta:     num(r['Qta']||0),
+    importo: num(r['Importo €']||0),
+  })).filter(r=>r.desc&&r.importo>0);
+}
+
+function parseObiettivi(rows) {
+  // Il foglio Obiettivi ha intestazioni extra nelle prime righe
+  // Le colonne arrivano con nomi generici (A,B,C...) quindi leggiamo per posizione
+  return rows.filter(r => {
+    const vals = Object.values(r);
+    const v = parseFloat(vals[0]);
+    return !isNaN(v) && v >= 1 && v <= 52;
+  }).map(r => {
+    const vals = Object.values(r);
+    return {
+      sett:       num(vals[0]||0),
+      objTeorico: num(vals[3]||0),
+      consuntivo: num(vals[4]||0),
+      delta:      num(vals[5]||0),
+      deltaCum:   num(vals[6]||0),
+      objRett:    num(vals[7]||0),
+      scost:      num(vals[8]||0),
+    };
+  });
+}
+
+// ── Init ──────────────────────────────────────────────────────
+let refreshTimer = null;
+const REFRESH_INTERVAL = 30 * 60 * 1000; // 30 minuti
+
+async function refreshData() {
+  const btn = document.getElementById('refresh-btn');
+  if (btn) { btn.textContent = '↻'; btn.style.color = 'var(--gold)'; }
+  document.getElementById('last-update').textContent = 'Aggiornamento...';
+  await loadData();
+  DATA._articoliCaricati = false; // forza reload articoli al prossimo accesso
+  renderTab();
+  if (btn) { btn.style.color = 'var(--sub)'; }
+  // Reset timer
+  if (refreshTimer) clearInterval(refreshTimer);
+  refreshTimer = setInterval(refreshData, REFRESH_INTERVAL);
+}
+
+async function loadData() {
+  const rRaw = await fetchSheet('Riepilogo');
+  const oRaw = await fetchSheet('Obiettivi');
+
+  DATA.riepilogo = parseRiepilogo(rRaw);
+  DATA.obiettivi = parseObiettivi(oRaw);
+  // Articoli caricati lazy (solo quando serve il tab)
+  DATA.articoli  = [];
+  DATA._articoliCaricati = false;
+
+  const dates = DATA.riepilogo.map(r=>parseDate(r.data)).filter(Boolean).sort((a,b)=>b-a);
+  if (dates.length>0) {
+    // Mostra data e ora dell ultimo REPORT disponibile
+    const ultimaData = dates[0];
+    // Cerca l ora del report nell ultimo giorno (dal campo data originale)
+    const ultimaRiga = DATA.riepilogo.find(r => {
+      const d = parseDate(r.data);
+      return d && d.getTime() === ultimaData.getTime();
+    });
+    const dataStr = ultimaData.toLocaleDateString('it-IT', {weekday:'short', day:'2-digit', month:'2-digit', year:'numeric'});
+    document.getElementById('last-update').textContent = 'Ultimo report: ' + dataStr;
+    document.getElementById('header-period').textContent =
+      dates[dates.length-1].toLocaleDateString('it-IT') + ' — ' + ultimaData.toLocaleDateString('it-IT');
+  }
+}
+
+async function init() {
+  document.getElementById('footer-date').textContent = new Date().toLocaleDateString('it-IT');
+  document.getElementById('period-info').textContent = getPeriodInfoText();
+
+  try {
+    await loadData();
+    renderTab();
+    // Avvia auto-refresh ogni 30 minuti
+    refreshTimer = setInterval(refreshData, REFRESH_INTERVAL);
+  } catch(e) {
+    document.getElementById('main-content').innerHTML=`
+      <div class="state-msg">
+        <div style="font-size:32px;margin-bottom:16px">⚠️</div>
+        <div style="color:var(--red);margin-bottom:8px">Errore caricamento dati</div>
+        <div style="font-size:12px;color:var(--muted)">${e.message}</div>
+      </div>`;
+  }
+}
+
+init();
+</script>
+</body>
+</html>
