@@ -1109,13 +1109,14 @@ function buildBEP() {
     return '<div class="state-msg">Nessun dato nel foglio Costi_BEP</div>';
   }
 
-  // Legge il foglio per label — le colonne arrivano come Object.values
+  // Legge il foglio per label — usa Object.values per accedere a label e valore
   function getByLabel(label) {
+    const lbl = label.toLowerCase().replace(/[^a-z0-9]/g, '');
     for (const r of raw) {
       const vals = Object.values(r);
-      const a = String(vals[0] || '').trim().toLowerCase();
+      const a = String(vals[0] || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
       const b = num(vals[1] || 0);
-      if (a.includes(label.toLowerCase()) && b !== 0) return b;
+      if (a.includes(lbl) && b !== 0) return b;
     }
     return 0;
   }
