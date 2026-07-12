@@ -1117,31 +1117,30 @@ function buildBEP() {
     return '<div class="state-msg">Nessun dato nel foglio Costi_BEP</div>';
   }
 
-  // Il foglio Costi_BEP ha le colonne con nomi lunghi come chiave
-  // La prima colonna (label) è il VALORE della prima chiave dell'oggetto
-  // La seconda colonna (importo) è sempre in chiave "B"
   function getByLabel(label) {
     const lbl = label.toLowerCase().replace(/[^a-z0-9]/g, '');
     for (const r of raw) {
       const keys = Object.keys(r);
-      // Il label è il VALORE della prima chiave
       const a = String(r[keys[0]] || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
-      // Il valore numerico è nella chiave "B"
       const b = num(r['B'] || 0);
       if (a.includes(lbl) && b !== 0) return b;
     }
     return 0;
   }
 
-  // Legge direttamente i totali precalcolati nel foglio
+  // COSTI DAL FOGLIO — tutto mensile
   const totaleFisso    = getByLabel('totale costi fissi');
-  const fbAssoluto     = getByLabel('food&beverage');
+  const fbMensile      = getByLabel('food&beverage');
   const totSerate      = getByLabel('totale costi serate mensili');
   const accontoMensile = getByLabel('accantonamento mensile') || 0;
-  const totaleCosti    = getByLabel('totale costi fissi + semi-fissi') + fbAssoluto + accontoMensile;
-  const bepMensileFoglio = getByLabel('bep mensile (€ netto iva');
+  const totaleCostiMensili = totaleFisso + fbMensile + totSerate + accontoMensile;
 
-  // Dettaglio costi fissi per la struttura
+  // BEP dal foglio (netto IVA)
+  const bepMensile  = getByLabel('bep mensile') || totaleCostiMensili;
+  const bepAnnuale  = bepMensile * 12;
+  const fbAnnuale   = fbMensile * 12;
+
+  // Dettaglio costi fissi
   const affitto       = getByLabel('affitto');
   const personale     = getByLabel('personale dipendente');
   const utenze        = getByLabel('utenze medie');
@@ -1149,67 +1148,57 @@ function buildBEP() {
   const consulenze    = getByLabel('commercialista');
   const altreFisse    = getByLabel('altre spese fisse');
 
-  // DATI REALI DAL RIEPILOGO
-  const now   = new Date();
-  const curr  = getPeriodRows(DATA.riepilogo, 0);
-  const incassoPeriodo = sumField(curr, 'incasso');
-  const copertiPeriodo = sumField(curr, 'coperti');
-
-  // YTD
+  // DATI REALI — sempre YTD annuale
+  const now = new Date();
   const ytd = DATA.riepilogo.filter(r => {
     const d = parseDate(r.data);
     return d && d.getFullYear() === now.getFullYear();
   });
-  const incassoYTD = sumField(ytd, 'incasso');
+  const incassoYTD  = sumField(ytd, 'incasso');
+  const copertiYTD  = sumField(ytd, 'coperti');
   const mesiPassati = now.getMonth() + 1;
   const proiezioneAnnuale = mesiPassati > 0 ? incassoYTD / mesiPassati * 12 : 0;
 
-  // F&B % reale sul periodo
-  const fbPctReale = incassoPeriodo > 0 ? fbAssoluto / incassoPeriodo * 100 : 0;
+  // F&B % reale = costo F&B annuale / incasso YTD annualizzato
+  const fbPctReale = proiezioneAnnuale > 0 ? fbAnnuale / proiezioneAnnuale * 100 : 0;
 
-  // Margine di contribuzione = (Incasso - F&B assoluto) / Incasso
-  const margineAssoluto = incassoPeriodo - fbAssoluto;
-  const marginePercReale = incassoPeriodo > 0 ? margineAssoluto / incassoPeriodo * 100 : 0;
+  // Margine lordo annuale
+  const margineAssoluto  = proiezioneAnnuale - fbAnnuale;
+  const marginePerc      = proiezioneAnnuale > 0 ? margineAssoluto / proiezioneAnnuale * 100 : 0;
+  const marginePerCoperto = copertiYTD > 0 ? (incassoYTD - fbAnnuale/12*mesiPassati) / copertiYTD : 0;
 
-  // BEP = Costi fissi / (1 - F&B% reale)
-  // Con F&B assoluto: BEP = Costi fissi totali (incluso F&B mensile stimato)
-  const bepMensile  = bepMensileFoglio || totaleCosti;
-  const bepAnnuale  = bepMensile * 12;
-
-  // Gap
-  const gapMensile = incassoPeriodo - bepMensile;
-  const percBEP    = bepMensile > 0 ? Math.min(incassoPeriodo / bepMensile * 100, 150) : 0;
+  // Gap BEP
+  const gapAnnuale = proiezioneAnnuale - bepAnnuale;
+  const percBEP    = bepAnnuale > 0 ? Math.min(proiezioneAnnuale / bepAnnuale * 100, 150) : 0;
   const colBar     = percBEP >= 100 ? 'var(--green)' : percBEP >= 80 ? 'var(--gold)' : 'var(--red)';
-  const colGap     = gapMensile >= 0 ? 'var(--green)' : 'var(--red)';
-
-  const labelPeriodo = getPeriodLabel(0);
+  const colGap     = gapAnnuale >= 0 ? 'var(--green)' : 'var(--red)';
 
   return '<div class="kpi-grid">' +
     '<div class="kpi-card"><div class="kpi-label">BEP mensile</div>' +
     '<div class="kpi-value gold">' + eur(bepMensile) + '</div>' +
-    '<div><span class="kpi-sub">costi totali mensili</span></div></div>' +
+    '<div><span class="kpi-sub">punto di pareggio mensile</span></div></div>' +
 
     '<div class="kpi-card"><div class="kpi-label">BEP annuale</div>' +
     '<div class="kpi-value">' + eur(bepAnnuale) + '</div>' +
-    '<div><span class="kpi-sub">proiezione 12 mesi</span></div></div>' +
+    '<div><span class="kpi-sub">obiettivo minimo annuo</span></div></div>' +
 
-    '<div class="kpi-card"><div class="kpi-label">Incasso ' + labelPeriodo + '</div>' +
-    '<div class="kpi-value" style="color:' + colGap + '">' + eur(incassoPeriodo) + '</div>' +
-    '<div><span style="color:' + colGap + ';font-weight:600">' +
-    (gapMensile >= 0 ? '+' : '') + eur(gapMensile) + ' vs BEP</span></div></div>' +
+    '<div class="kpi-card"><div class="kpi-label">Proiezione annuale</div>' +
+    '<div class="kpi-value" style="color:' + colGap + '">' + eur(proiezioneAnnuale) + '</div>' +
+    '<div><span style="color:' + colGap + ';font-size:12px;font-weight:600">' +
+    (gapAnnuale >= 0 ? '+' : '') + eur(gapAnnuale) + ' vs BEP</span></div></div>' +
 
-    '<div class="kpi-card"><div class="kpi-label">F&B % reale</div>' +
+    '<div class="kpi-card"><div class="kpi-label">F&B % su proiezione</div>' +
     '<div class="kpi-value">' + fbPctReale.toFixed(1) + '%</div>' +
-    '<div><span class="kpi-sub">' + eur(fbAssoluto) + ' / ' + eur(incassoPeriodo) + '</span></div></div>' +
+    '<div><span class="kpi-sub">' + eur(fbAnnuale) + ' / anno</span></div></div>' +
     '</div>' +
 
     '<div class="card">' +
     '<div style="display:flex;justify-content:space-between;margin-bottom:8px">' +
-    '<div class="card-title" style="margin:0">Copertura BEP — ' + labelPeriodo + '</div>' +
+    '<div class="card-title" style="margin:0">Copertura BEP annuale — proiezione ' + now.getFullYear() + '</div>' +
     '<span style="font-size:20px;font-weight:700;color:' + colBar + '">' + percBEP.toFixed(1) + '%</span>' +
     '</div>' +
     '<div class="obj-bar-track"><div class="obj-bar-fill" style="width:' + Math.min(percBEP,100) + '%;background:' + colBar + '"></div></div>' +
-    '<div class="obj-labels"><span>€0</span><span>' + eur(bepMensile) + '</span></div>' +
+    '<div class="obj-labels"><span>€0</span><span>' + eur(bepAnnuale) + '</span></div>' +
     '</div>' +
 
     '<div class="two-col">' +
@@ -1219,42 +1208,35 @@ function buildBEP() {
       ['Personale',             personale],
       ['Utenze',                utenze],
       ['Consulenze',            consulenze],
-      ['Marketing / serate',    totSerate],
+      ['Serate / intrattenimento', totSerate],
       ['Assicurazioni',         assicurazioni],
       ['Altre spese fisse',     altreFisse],
-      ['F&B (costo assoluto)',  fbAssoluto],
-      ['Accantonamento imposte',accontoMensile],
+      ['F&B (costo assoluto)',  fbMensile],
     ].filter(r => r[1] > 0).map(r =>
       '<div class="compare-row"><span class="compare-label">' + r[0] + '</span>' +
       '<span class="compare-curr">' + eur(r[1]) + '</span>' +
-      '<span class="kpi-sub" style="margin-left:6px">' + (totaleCosti > 0 ? (r[1]/totaleCosti*100).toFixed(1) + '%' : '') + '</span></div>'
+      '<span class="kpi-sub" style="margin-left:6px">' + (totaleCostiMensili > 0 ? (r[1]/totaleCostiMensili*100).toFixed(1) + '%' : '') + '</span></div>'
     ).join('') +
     '<div class="compare-row" style="border-top:1px solid var(--border);margin-top:8px;padding-top:8px">' +
-    '<span class="compare-label" style="font-weight:700">Totale costi</span>' +
-    '<span class="compare-curr" style="font-weight:700">' + eur(totaleCosti) + '</span></div>' +
+    '<span class="compare-label" style="font-weight:700">Totale costi mensili</span>' +
+    '<span class="compare-curr" style="font-weight:700">' + eur(totaleCostiMensili) + '</span></div>' +
     '</div>' +
 
-    '<div class="card"><div class="card-title">Analisi margine</div>' +
-    '<div class="compare-row"><span class="compare-label">Incasso periodo</span><span class="compare-curr">' + eur(incassoPeriodo) + '</span></div>' +
-    '<div class="compare-row"><span class="compare-label">F&B assoluto</span><span class="compare-curr" style="color:var(--red)">- ' + eur(fbAssoluto) + '</span></div>' +
+    '<div class="card"><div class="card-title">Analisi margine — YTD ' + now.getFullYear() + '</div>' +
+    '<div class="compare-row"><span class="compare-label">Incasso YTD</span><span class="compare-curr">' + eur(incassoYTD) + '</span></div>' +
+    '<div class="compare-row"><span class="compare-label">Proiezione annuale</span><span class="compare-curr">' + eur(proiezioneAnnuale) + '</span></div>' +
+    '<div class="compare-row"><span class="compare-label">F&B annuale stimato</span><span class="compare-curr" style="color:var(--red)">- ' + eur(fbAnnuale) + '</span></div>' +
     '<div class="compare-row" style="border-top:1px solid var(--border);margin-top:4px;padding-top:8px">' +
-    '<span class="compare-label" style="font-weight:700">Margine lordo</span>' +
+    '<span class="compare-label" style="font-weight:700">Margine lordo stimato</span>' +
     '<span class="compare-curr" style="font-weight:700;color:' + (margineAssoluto>=0?'var(--green)':'var(--red)') + '">' + eur(margineAssoluto) + '</span></div>' +
     '<div class="compare-row"><span class="compare-label">Margine %</span>' +
-    '<span class="compare-curr" style="color:' + (marginePercReale>=40?'var(--green)':'var(--gold)') + '">' + marginePercReale.toFixed(1) + '%</span></div>' +
-    '<div class="compare-row"><span class="compare-label">Coperti periodo</span><span class="compare-curr">' + copertiPeriodo + '</span></div>' +
+    '<span class="compare-curr" style="color:' + (marginePerc>=40?'var(--green)':'var(--gold)') + '">' + marginePerc.toFixed(1) + '%</span></div>' +
+    '<div class="compare-row"><span class="compare-label">Coperti YTD</span><span class="compare-curr">' + copertiYTD + '</span></div>' +
     '<div class="compare-row"><span class="compare-label">Margine per coperto</span>' +
-    '<span class="compare-curr">' + (copertiPeriodo > 0 ? eur(margineAssoluto/copertiPeriodo) : 'N/D') + '</span></div>' +
-    '</div></div>' +
-
-    '<div class="card"><div class="card-title">YTD ' + now.getFullYear() + ' — Proiezione</div>' +
-    '<div class="compare-row"><span class="compare-label">Incasso YTD</span><span class="compare-curr">' + eur(incassoYTD) + '</span></div>' +
-    '<div class="compare-row"><span class="compare-label">Proiezione a fine anno</span><span class="compare-curr">' + eur(proiezioneAnnuale) + '</span></div>' +
-    '<div class="compare-row"><span class="compare-label">BEP annuale</span><span class="compare-curr">' + eur(bepAnnuale) + '</span></div>' +
+    '<span class="compare-curr">' + (copertiYTD > 0 ? eur(marginePerCoperto) : 'N/D') + '</span></div>' +
     '<div class="compare-row"><span class="compare-label">Gap proiezione vs BEP</span>' +
-    '<span class="compare-curr" style="color:' + (proiezioneAnnuale>=bepAnnuale?'var(--green)':'var(--red)') + '">' +
-    (proiezioneAnnuale >= bepAnnuale ? '+' : '') + eur(proiezioneAnnuale - bepAnnuale) + '</span></div>' +
-    '</div>';
+    '<span class="compare-curr" style="color:' + colGap + '">' + (gapAnnuale>=0?'+':'') + eur(gapAnnuale) + '</span></div>' +
+    '</div></div>';
 }
 
 
