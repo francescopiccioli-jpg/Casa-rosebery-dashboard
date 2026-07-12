@@ -438,7 +438,15 @@ function renderTab() {
   const el = document.getElementById('main-content');
   // Tab che richiedono articoli: carica lazy
   const needsArticoli = ['oggi','articoli','custom'];
-  const needsBEP = ['bep'];
+  if (currentTab === 'bep' && !DATA._bepCaricato) {
+    el.innerHTML = '<div class="state-msg"><div class="spinner"></div><div>Caricamento BEP...</div></div>';
+    fetchSheet('Costi_BEP').then(raw => {
+      DATA.costiBEP = raw;
+      DATA._bepCaricato = true;
+      renderTab();
+    }).catch(() => { DATA._bepCaricato = true; renderTab(); });
+    return;
+  }
   if (needsArticoli.includes(currentTab) && !DATA._articoliCaricati) {
     el.innerHTML = '<div class="state-msg"><div class="spinner"></div><div>Caricamento articoli...</div></div>';
     fetchSheet('Articoli').then(aRaw => {
