@@ -1109,13 +1109,17 @@ function buildBEP() {
     return '<div class="state-msg">Nessun dato nel foglio Costi_BEP</div>';
   }
 
-  // Legge il foglio per label — usa Object.values per accedere a label e valore
+  // Il foglio Costi_BEP ha le colonne con nomi lunghi come chiave
+  // La prima colonna (label) è il VALORE della prima chiave dell'oggetto
+  // La seconda colonna (importo) è sempre in chiave "B"
   function getByLabel(label) {
     const lbl = label.toLowerCase().replace(/[^a-z0-9]/g, '');
     for (const r of raw) {
-      const vals = Object.values(r);
-      const a = String(vals[0] || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
-      const b = num(vals[1] || 0);
+      const keys = Object.keys(r);
+      // Il label è il VALORE della prima chiave
+      const a = String(r[keys[0]] || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
+      // Il valore numerico è nella chiave "B"
+      const b = num(r['B'] || 0);
       if (a.includes(lbl) && b !== 0) return b;
     }
     return 0;
