@@ -262,7 +262,7 @@
 </header>
 
 <!-- Selettore periodo -->
-<div class="period-bar">
+<div class="period-bar" id="period-bar">
   <span class="period-label">Periodo</span>
   <button class="period-btn active" onclick="setPeriod('week',this)">Settimana</button>
   <button class="period-btn" onclick="setPeriod('month',this)">Mese</button>
@@ -272,7 +272,7 @@
 
 <nav>
   <button class="active" onclick="showTab('oggi',this)">Oggi</button>
-  <button onclick="showTab('overview',this)">Settimana</button>
+  <button onclick="showTab('overview',this)">Panoramica</button>
   <button onclick="showTab('obiettivo',this)">Obiettivo</button>
   <button onclick="showTab('articoli',this)">Articoli</button>
   <button onclick="showTab('trend',this)">Trend</button>
@@ -434,10 +434,15 @@ function showTab(tab, btn) {
   renderTab();
 }
 
+// Schede in cui il selettore di periodo ha effetto
+const PERIOD_TABS = ['overview','obiettivo','articoli','menu'];
+
 function renderTab() {
   const el = document.getElementById('main-content');
+  const pb = document.getElementById('period-bar');
+  if (pb) pb.style.display = PERIOD_TABS.includes(currentTab) ? '' : 'none';
   // Tab che richiedono articoli: carica lazy
-  const needsArticoli = ['oggi','articoli','custom'];
+  const needsArticoli = ['oggi','articoli','custom','menu'];
   if (currentTab === 'bep' && !DATA._bepCaricato) {
     el.innerHTML = '<div class="state-msg"><div class="spinner"></div><div>Caricamento BEP...</div></div>';
     fetchSheet('Costi_BEP').then(raw => {
@@ -547,10 +552,11 @@ function buildOverview() {
 
     <div class="card">
       <div class="card-title">Dettaglio ${labelCurr} vs ${labelPrev}</div>
-      ${['cucina','braceria','vini','dolci','bevande'].map(k=>{
+      ${['cucina','braceria','vini','dolci','bevande','eventi'].map(k=>{
         const c=sumField(curr,k), p=sumField(prev,k), d=delta(c,p);
+        const nome = k==='eventi' ? 'Eventi / Menu fisso' : k.charAt(0).toUpperCase()+k.slice(1);
         return `<div class="compare-row">
-          <span class="compare-label">${k.charAt(0).toUpperCase()+k.slice(1)}</span>
+          <span class="compare-label">${nome}</span>
           <span class="compare-prev">${eur(p)}</span>
           <span class="compare-arrow">→</span>
           <span class="compare-curr">${eur(c)}</span>
@@ -558,7 +564,29 @@ function buildOverview() {
         </div>`;
       }).join('')}
     </div>
+    ${buildPagamentiCard(curr, prev, labelCurr, labelPrev)}
   `;
+}
+
+// Ripartizione pagamenti (dati dal gestionale, dal 2025)
+function buildPagamentiCard(curr, prev, labelCurr, labelPrev) {
+  const voci = [['contanti','Contanti'],['carte','Carte'],['bonifico','Bonifico / altro']];
+  const totC = voci.reduce((s,v)=>s+sumField(curr,v[0]),0);
+  if (totC <= 0) return '';
+  return `<div class="card">
+      <div class="card-title">Pagamenti — ${labelCurr} vs ${labelPrev}</div>
+      ${voci.map(v=>{
+        const c=sumField(curr,v[0]), p=sumField(prev,v[0]), d=delta(c,p);
+        const quota = totC>0 ? (c/totC*100).toFixed(0)+'%' : '';
+        return `<div class="compare-row">
+          <span class="compare-label">${v[1]} <span class="kpi-sub">${quota}</span></span>
+          <span class="compare-prev">${eur(p)}</span>
+          <span class="compare-arrow">→</span>
+          <span class="compare-curr">${eur(c)}</span>
+          ${d!==null?`<span class="kpi-delta ${d>=0?'pos':'neg'}">${d>=0?'▲':'▼'} ${Math.abs(d).toFixed(1)}%</span>`:''}
+        </div>`;
+      }).join('')}
+    </div>`;
 }
 
 function formatDay(v) {
@@ -2595,7 +2623,7 @@ function getCategoriaArticolo(descrizione) {
 
 // ── TAB: MENU ENGINEERING ─────────────────────────────────────
 let meCategoria = 'tutti';
-let mePeriodo   = 90;
+let mePeriodo   = 0; // 0 = segue il periodo selezionato in alto
 
 // Mappa articolo -> categoria (basata sui codici reparto)
 const CAT_MAP = {
@@ -2627,9 +2655,9 @@ function buildMenuEngineering() {
     controlsHtml += '<button class="me-filter-btn'+active+'" data-cat="'+c+'" onclick="setMeCat(this.dataset.cat)">'+catLabels[c]+'</button>';
   });
   controlsHtml += '<div class="me-period"><label>Periodo</label><select id="meperiodo" onchange="setMePeriodo(parseInt(this.value))">';
-  [30,60,90,180,365].forEach(function(d) {
+  [0,30,60,90,180,365].forEach(function(d) {
     const sel = mePeriodo===d ? ' selected' : '';
-    const lbl = d===365?'Anno':d===180?'6 mesi':d+' giorni';
+    const lbl = d===0?'Periodo selezionato':d===365?'Anno':d===180?'6 mesi':d+' giorni';
     controlsHtml += '<option value="'+d+'"'+sel+'>'+lbl+'</option>';
   });
   controlsHtml += '</select></div></div>';
@@ -2639,13 +2667,14 @@ function buildMenuEngineering() {
   const cutoff = new Date();
   cutoff.setDate(cutoff.getDate() - mePeriodo);
 
-  const artFiltrati = DATA.articoli.filter(r => {
+  const artBase = mePeriodo === 0 ? getPeriodRows(DATA.articoli, 0) : DATA.articoli;
+  const artFiltrati = artBase.filter(r => {
     const d = parseDate(r.data);
-    return d && d >= cutoff && r.desc && num(r.importo) > 0;
+    return d && (mePeriodo === 0 || d >= cutoff) && r.desc && num(r.importo) > 0;
   });
 
   if (artFiltrati.length === 0) {
-    return controls + '<div style="color:var(--muted);text-align:center;padding:40px">Nessun dato — carica prima il tab Articoli</div>';
+    return controls + '<div style="color:var(--muted);text-align:center;padding:40px">Nessun articolo venduto nel periodo selezionato</div>';
   }
 
   // Aggrega per articolo
@@ -2716,7 +2745,7 @@ function buildMenuEngineering() {
   // Soglie visibili
   const soglie =
     '<div style="color:var(--muted);font-size:11px;margin-bottom:16px">' +
-    'Soglie periodo ('+mePeriodo+'gg): ' +
+    'Soglie periodo ('+(mePeriodo===0 ? getPeriodLabel(0) : mePeriodo+'gg')+'): ' +
     'Quantità media: <span style="color:var(--text)">'+Math.round(mediaQta)+' pz</span> · ' +
     'Incasso medio: <span style="color:var(--text)">'+eur(mediaIncasso)+'</span>' +
     (true ? ' · <span style="font-style:italic">Food cost: non disponibile — verrà usato quando caricato</span>' : '') +
@@ -3235,10 +3264,13 @@ function parseRiepilogo(rows) {
     vini:      num(r['Vini €']||0),
     dolci:     num(r['Dolci €']||0),
     bevande:   num(r['Bevande €']||0),
-    scontrino: num(r['Scontrino']||0),
-    credito:   num(r['Credito']||0),
-    altro:     num(r['Altro']||0),
+    contanti:  num(r['Contanti €']||0),
+    carte:     num(r['Carte €']||0),
+    bonifico:  num(r['Bonifico/Altro €']||0),
     tavoli:    num(r['Tavoli']||0),
+    eventi:    num(r['Eventi / Menu fisso €']||0),
+    servizio:  num(r['Servizio €']||0),
+    altriRic:  num(r['Altri ricavi €']||0),
   })).filter(r=>r.incasso>0||r.coperti>0);
 }
 
