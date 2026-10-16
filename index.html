@@ -279,6 +279,7 @@
   <button onclick="showTab('anno',this)">Anno</button>
   <button onclick="showTab('menu',this)">Menu Engineering</button>
   <button onclick="showTab('bep',this)">BEP</button>
+  <button onclick="showTab('costi',this)">Costi</button>
   <button onclick="showTab('custom',this)">Personalizzato</button>
 </nav>
 
@@ -452,6 +453,17 @@ function renderTab() {
     }).catch(() => { DATA._bepCaricato = true; renderTab(); });
     return;
   }
+  if (currentTab === 'costi' && !DATA._speseCaricate) {
+    el.innerHTML = '<div class="state-msg"><div class="spinner"></div><div>Caricamento costi...</div></div>';
+    Promise.all([fetchSheet('Spese'), DATA._bepCaricato ? Promise.resolve(DATA.costiBEP) : fetchSheet('Costi_BEP')])
+      .then(([sp, bep]) => {
+        DATA.spese = parseSpese(sp);
+        if (!DATA._bepCaricato) { DATA.costiBEP = bep; DATA._bepCaricato = true; }
+        DATA._speseCaricate = true; renderTab();
+      })
+      .catch(() => { DATA.spese = []; DATA._speseCaricate = true; renderTab(); });
+    return;
+  }
   if (needsArticoli.includes(currentTab) && !DATA._articoliCaricati) {
     el.innerHTML = '<div class="state-msg"><div class="spinner"></div><div>Caricamento articoli...</div></div>';
     fetchSheet('Articoli').then(aRaw => {
@@ -472,6 +484,7 @@ function renderTab() {
   else if (currentTab==='anno')      el.innerHTML = buildAnno();
   else if (currentTab==='menu')      el.innerHTML = buildMenuEngineering();
   else if (currentTab==='bep')       el.innerHTML = buildBEP();
+  else if (currentTab==='costi')     el.innerHTML = buildCosti();
   else if (currentTab==='trend')     el.innerHTML = buildTrend();
   else if (currentTab==='custom')    el.innerHTML = buildCustom();
   renderCharts();
@@ -2802,6 +2815,221 @@ function setMePeriodo(val) {
 }
 
 
+// ── TAB: COSTI ───────────────────────────────────────────────
+// Fonte: foglio "Spese" (estratto conto classificato da CostiDaBanca.gs)
+// Le spese con Mesi > 1 (affitto annuale, assicurazioni, investimenti) sono ripartite sui mesi di competenza.
+let costiPeriodo = 'ytd';
+let costiGruppoAperto = null;
+const COSTI_GRUPPI = [
+  { id:'fb',    nome:'Food & beverage',                 col:'#a07830', cat:['FOOD & BEVERAGE'],                          bep:[] },
+  { id:'pers',  nome:'Personale',                       col:'#2a78d6', cat:['PERSONALE'],                                bep:['personaledipendente'] },
+  { id:'strut', nome:'Affitto, leasing, ammortamenti',  col:'#eb6834', cat:['AFFITTO / LEASING','INVESTIMENTI','ASSICURAZIONI'], bep:['affittoleasing','ammortamenti','assicurazioni'] },
+  { id:'ut',    nome:'Utenze',                          col:'#1baf7a', cat:['ENERGIA','TELECOMUNICAZIONI'],              bep:['utenzemedie'] },
+  { id:'altro', nome:'Servizi, marketing e altro',      col:'#6250d6', cat:[],                                           bep:['commercialistaconsulenze','altrespesefisse','totalecostiseratemensili'] },
+];
+const MESI_BREVI = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
+const mKey  = d => d.getFullYear()*12 + d.getMonth();
+const mNome = k => MESI_BREVI[k%12] + ' ' + String(Math.floor(k/12)).slice(2);
+const pct   = (a,b) => b>0 ? a/b*100 : null;
+const pctTxt = v => v===null ? '–' : v.toFixed(1).replace('.',',') + '%';
+const escH  = s => String(s||'').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+function controparteDi(desc) {
+  const D = String(desc||'').toUpperCase().replace(/\s+/g,' ');
+  let m = D.match(/A FAVORE DI (.+?) E ?UR\b/) || D.match(/ADDEBITO (?:SDD|B2B) (.+?) N:/) ||
+          D.match(/CIRCUITO INTERNAZIONALE (.+?) (?:ITA|IRL|DUBLIN|MILAN|ROMA|LUX)\b/);
+  if (m) return m[1].trim().replace(/\b(S\.?R\.?L\.?|SPA|S P A)\b.*$/,'').trim().slice(0,30) || m[1].slice(0,30);
+  if (/ASSEGNO/.test(D)) return 'Assegni';
+  if (/RIBA/.test(D)) return 'RIBA fornitori';
+  if (/F24|DELEGA/.test(D)) return 'F24';
+  if (/RATA PRESTITO/.test(D)) return 'Rata prestito';
+  return D.split(' ').slice(0,3).join(' ');
+}
+
+function gruppoDi(cat) {
+  const g = COSTI_GRUPPI.find(g => g.cat.includes(cat));
+  return g ? g.id : 'altro';
+}
+
+function parseSpese(rows) {
+  return rows.map(r => ({
+    d:    parseDate(r['Data']),
+    cat:  String(r['Categoria']||'').trim(),
+    desc: String(r['Descrizione']||''),
+    imp:  num(r['Importo €']),
+    mesi: Math.max(1, Math.round(num(r['Mesi'])||1)),
+    cp:   String(r['Controparte']||'').trim(),
+  })).filter(x => x.d && x.imp > 0 && x.cat && x.cat.indexOf('ESCLUSO') !== 0);
+}
+
+// Aggrega per mese di competenza: { mesi:[k...], cat:{cat:{k:€}}, cp:{gruppo:{cp:{k:€}}}, ultimo, parziale }
+function costiPerMese() {
+  const sp = DATA.spese || [];
+  if (!sp.length) return null;
+  const ultimoGiorno = sp.reduce((m,x) => x.d > m ? x.d : m, sp[0].d);
+  const ultimoMese = mKey(ultimoGiorno);
+  const parziale = ultimoGiorno.getDate() < 28;
+  const primo = sp.reduce((m,x) => Math.min(m, mKey(x.d)), Infinity);
+  const cat = {}, cp = {};
+  let daClass = 0;
+  sp.forEach(x => {
+    if (x.cat === 'DA CLASSIFICARE') daClass++;
+    const g = gruppoDi(x.cat);
+    const nome = controparteDi(x.desc);
+    for (let i = 0; i < x.mesi; i++) {
+      const k = mKey(x.d) + i;
+      if (k > ultimoMese) break;
+      const q = x.imp / x.mesi;
+      ((cat[x.cat] = cat[x.cat] || {})[k] = (cat[x.cat][k] || 0) + q);
+      const cg = cp[g] = cp[g] || {};
+      ((cg[nome] = cg[nome] || {})[k] = (cg[nome][k] || 0) + q);
+    }
+  });
+  const ric = {};
+  DATA.riepilogo.forEach(r => { const d = parseDate(r.data); if (d) ric[mKey(d)] = (ric[mKey(d)] || 0) + r.incasso; });
+  const mesi = []; for (let k = primo; k <= ultimoMese; k++) mesi.push(k);
+  return { mesi, cat, cp, ric, ultimoMese, ultimoGiorno, parziale, daClass };
+}
+
+function costiPeriodoMesi(A) {
+  const chiuso = A.parziale ? A.ultimoMese - 1 : A.ultimoMese;
+  const p = costiPeriodo;
+  if (p === 'ytd') { const y = Math.floor(chiuso/12); return A.mesi.filter(k => k >= y*12 && k <= chiuso); }
+  if (p === 'l12') return A.mesi.filter(k => k > chiuso - 12 && k <= chiuso);
+  if (p.startsWith('q:')) { const q0 = +p.slice(2); return A.mesi.filter(k => k >= q0 && k < q0 + 3); }
+  if (p.startsWith('m:')) return [+p.slice(2)];
+  return A.mesi;
+}
+
+function setCostiPeriodo(v) { costiPeriodo = v; document.getElementById('main-content').innerHTML = buildCosti(); renderCharts(); }
+function toggleCostiGruppo(id) { costiGruppoAperto = costiGruppoAperto === id ? null : id; document.getElementById('main-content').innerHTML = buildCosti(); renderCharts(); }
+
+function bepValore(label) {
+  const raw = DATA.costiBEP || [];
+  for (const r of raw) {
+    const k = Object.keys(r);
+    const a = String(r[k[0]]||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+    if (a.indexOf(label) === 0) return num(r[k[1]]);
+  }
+  return null;
+}
+
+function buildCosti() {
+  const A = costiPerMese();
+  if (!A) return '<div class="card" style="text-align:center;padding:40px"><div style="font-size:32px;margin-bottom:12px">🧾</div>' +
+    '<div style="color:var(--sub)">Nessuna spesa nel foglio <b>Spese</b>.<br>Esegui <code>cb_setup()</code> e carica l\'estratto conto nella cartella Drive "Casa Rosebery - Estratti conto".</div></div>';
+
+  const mesi = costiPeriodoMesi(A);
+  const n = mesi.length || 1;
+  const sum = (obj) => mesi.reduce((t,k) => t + ((obj||{})[k] || 0), 0);
+  const ricavi = mesi.reduce((t,k) => t + (A.ric[k] || 0), 0);
+
+  // Totali per categoria e gruppo
+  const catTot = {};
+  Object.keys(A.cat).forEach(c => { const v = sum(A.cat[c]); if (v > 0.5) catTot[c] = v; });
+  const grp = COSTI_GRUPPI.map(g => {
+    const cats = Object.keys(catTot).filter(c => gruppoDi(c) === g.id).sort((a,b) => catTot[b]-catTot[a]);
+    const tot = cats.reduce((t,c) => t + catTot[c], 0);
+    let prev = null;
+    if (g.id === 'fb') { const f = bepValore('foodcost'), b = bepValore('beveragechampagnecost'); if (f !== null) prev = (f + (b||0)) / 100 * ricavi / n; }
+    else { const vals = g.bep.map(bepValore).filter(v => v !== null); if (vals.length) prev = vals.reduce((a,b)=>a+b,0); }
+    return Object.assign({}, g, { cats, tot, mese: tot/n, prev });
+  });
+  const totCosti = grp.reduce((t,g) => t + g.tot, 0);
+  const margine = ricavi - totCosti;
+
+  // Selettore periodo
+  const chiuso = A.parziale ? A.ultimoMese - 1 : A.ultimoMese;
+  const opz = [['ytd','Anno '+Math.floor(chiuso/12)+' (mesi chiusi)'], ['l12','Ultimi 12 mesi chiusi'], ['all','Tutto lo storico']];
+  const quarti = [...new Set(A.mesi.map(k => k - k%3))].filter(q => q + 2 <= chiuso).reverse();
+  quarti.forEach(q => opz.push(['q:'+q, 'Q'+(q%12/3+1)+' '+Math.floor(q/12)]));
+  A.mesi.slice().reverse().forEach(k => opz.push(['m:'+k, mNome(k) + (k === A.ultimoMese && A.parziale ? ' (parziale)' : '')]));
+  const sel = '<div class="me-period" style="margin-bottom:16px"><label>Periodo</label><select onchange="setCostiPeriodo(this.value)">' +
+    opz.map(o => '<option value="'+o[0]+'"'+(o[0]===costiPeriodo?' selected':'')+'>'+o[1]+'</option>').join('') + '</select>' +
+    '<span style="color:var(--muted);font-size:11px">'+(mesi.length ? mNome(mesi[0])+' – '+mNome(mesi[mesi.length-1])+' · '+n+' mesi' : '')+'</span></div>';
+
+  const avviso = A.daClass > 0
+    ? '<div class="card" style="border-color:var(--gold);padding:12px 16px;font-size:12px">⚠️ '+A.daClass+' uscite <b>DA CLASSIFICARE</b> nel foglio Spese: sono incluse in "Servizi, marketing e altro" finché non le classifichi.</div>' : '';
+
+  const kpi = '<div class="kpi-grid">' +
+    '<div class="kpi-card"><div class="kpi-label">Costi del periodo</div><div class="kpi-value">'+eur(totCosti)+'</div><div><span class="kpi-sub" style="margin:0">'+eur(totCosti/n)+' al mese</span></div></div>' +
+    '<div class="kpi-card"><div class="kpi-label">Produzione (incasso)</div><div class="kpi-value gold">'+eur(ricavi)+'</div><div><span class="kpi-sub" style="margin:0">'+eur(ricavi/n)+' al mese</span></div></div>' +
+    '<div class="kpi-card"><div class="kpi-label">Costi su produzione</div><div class="kpi-value">'+pctTxt(pct(totCosti,ricavi))+'</div><div><span class="kpi-sub" style="margin:0">IVA inclusa su costi e incasso</span></div></div>' +
+    '<div class="kpi-card"><div class="kpi-label">Margine di cassa</div><div class="kpi-value" style="color:'+(margine>=0?'var(--green)':'var(--red)')+'">'+eur(margine)+'</div><div><span class="kpi-sub" style="margin:0">'+pctTxt(pct(margine,ricavi))+' · IVA da versare esclusa</span></div></div>' +
+    '</div>';
+
+  // Tabella per gruppo, con dettaglio categorie e controparti
+  const th = s => '<th style="text-align:right">'+s+'</th>';
+  let rows = '';
+  grp.forEach(g => {
+    const aperto = costiGruppoAperto === g.id;
+    const scost = g.prev ? (g.mese - g.prev) / g.prev * 100 : null;
+    const w = totCosti > 0 ? g.tot / totCosti * 100 : 0;
+    rows += '<tr style="cursor:pointer" onclick="toggleCostiGruppo(\''+g.id+'\')">' +
+      '<td><span style="display:inline-block;width:10px;height:10px;border-radius:2px;background:'+g.col+';margin-right:8px"></span><b>'+g.nome+'</b> <span style="color:var(--muted);font-size:11px">'+(aperto?'▾':'▸')+'</span>' +
+      '<div class="art-bar-track" style="margin-top:6px;max-width:220px"><div class="art-bar-fill" style="width:'+w.toFixed(1)+'%;background:'+g.col+';opacity:.8"></div></div></td>' +
+      '<td style="text-align:right;font-family:JetBrains Mono,monospace">'+eur(g.tot)+'</td>' +
+      '<td style="text-align:right;font-family:JetBrains Mono,monospace">'+eur(g.mese)+'</td>' +
+      '<td style="text-align:right;font-family:JetBrains Mono,monospace;font-weight:700">'+pctTxt(pct(g.tot,ricavi))+'</td>' +
+      '<td style="text-align:right;font-family:JetBrains Mono,monospace;color:var(--sub)">'+(g.prev?eur(g.prev):'–')+'</td>' +
+      '<td style="text-align:right;font-size:12px;font-weight:600;color:'+(scost===null?'var(--muted)':scost>5?'var(--red)':scost<-5?'var(--green)':'var(--sub)')+'">'+(scost===null?'–':(scost>0?'▲ ':'▼ ')+Math.abs(scost).toFixed(0)+'%')+'</td></tr>';
+    if (aperto) {
+      (g.cats.length > 1 ? g.cats : []).forEach(c => {
+        rows += '<tr style="background:var(--surface)"><td style="padding-left:32px">'+escH(c.charAt(0)+c.slice(1).toLowerCase())+'</td>' +
+          '<td style="text-align:right;font-family:JetBrains Mono,monospace">'+eur(catTot[c])+'</td>' +
+          '<td style="text-align:right;font-family:JetBrains Mono,monospace">'+eur(catTot[c]/n)+'</td>' +
+          '<td style="text-align:right;font-family:JetBrains Mono,monospace">'+pctTxt(pct(catTot[c],ricavi))+'</td><td></td><td></td></tr>';
+      });
+      // Personale: niente dettaglio per nominativo (retribuzioni individuali)
+      const cps = g.id === 'pers' ? [] : Object.entries(A.cp[g.id] || {}).map(([k,v]) => [k, sum(v)]).filter(x => x[1] > 0.5).sort((a,b) => b[1]-a[1]).slice(0, 8);
+      if (cps.length) {
+        rows += '<tr style="background:var(--surface)"><td colspan="6" style="padding-left:32px;color:var(--sub);font-size:10px;text-transform:uppercase;letter-spacing:1.5px">Principali controparti</td></tr>';
+        cps.forEach(([k,v]) => {
+          rows += '<tr style="background:var(--surface)"><td style="padding-left:32px;font-size:12px;color:var(--sub)">'+escH(k)+'</td>' +
+            '<td style="text-align:right;font-family:JetBrains Mono,monospace;font-size:12px">'+eur(v)+'</td>' +
+            '<td style="text-align:right;font-family:JetBrains Mono,monospace;font-size:12px">'+eur(v/n)+'</td>' +
+            '<td style="text-align:right;font-family:JetBrains Mono,monospace;font-size:12px">'+pctTxt(pct(v,ricavi))+'</td><td></td><td></td></tr>';
+        });
+      }
+    }
+  });
+  rows += '<tr><td><b>Totale costi</b></td><td style="text-align:right;font-family:JetBrains Mono,monospace;font-weight:700">'+eur(totCosti)+'</td>' +
+    '<td style="text-align:right;font-family:JetBrains Mono,monospace;font-weight:700">'+eur(totCosti/n)+'</td>' +
+    '<td style="text-align:right;font-family:JetBrains Mono,monospace;font-weight:700">'+pctTxt(pct(totCosti,ricavi))+'</td>' +
+    '<td style="text-align:right;font-family:JetBrains Mono,monospace;color:var(--sub)">'+eur(grp.reduce((t,g)=>t+(g.prev||0),0))+'</td><td></td></tr>';
+  const tabella = '<div class="card"><div class="card-title">Costi per voce — clicca una voce per il dettaglio</div><div style="overflow-x:auto"><table class="me-table">' +
+    '<thead><tr><th>Voce</th>'+th('Totale')+th('Media/mese')+th('% produzione')+th('Previsto BEP/mese')+th('vs BEP')+'</tr></thead><tbody>'+rows+'</tbody></table></div></div>';
+
+  // Tabella mese per mese
+  const mm = mesi;
+  const cella = (v, r) => '<td style="text-align:right;font-family:JetBrains Mono,monospace;font-size:12px;white-space:nowrap">'+eur(v)+'<div style="color:var(--muted);font-size:10px">'+pctTxt(pct(v,r))+'</div></td>';
+  let mrows = '<tr><td><b>Produzione</b></td>' + mm.map(k => '<td style="text-align:right;font-family:JetBrains Mono,monospace;font-size:12px;color:var(--gold);font-weight:600">'+eur(A.ric[k]||0)+'</td>').join('') + '</tr>';
+  const totMese = k => grp.reduce((t,g) => t + g.cats.reduce((s,c) => s + (A.cat[c][k]||0), 0), 0);
+  grp.forEach(g => {
+    mrows += '<tr><td style="white-space:nowrap"><span style="display:inline-block;width:8px;height:8px;border-radius:2px;background:'+g.col+';margin-right:6px"></span>'+g.nome+'</td>' +
+      mm.map(k => cella(g.cats.reduce((s,c) => s + (A.cat[c][k]||0), 0), A.ric[k]||0)).join('') + '</tr>';
+  });
+  mrows += '<tr><td><b>Totale costi</b></td>' + mm.map(k => cella(totMese(k), A.ric[k]||0)).join('') + '</tr>';
+  mrows += '<tr><td><b>Margine di cassa</b></td>' + mm.map(k => { const v = (A.ric[k]||0) - totMese(k);
+    return '<td style="text-align:right;font-family:JetBrains Mono,monospace;font-size:12px;font-weight:600;color:'+(v>=0?'var(--green)':'var(--red)')+'">'+eur(v)+'</td>'; }).join('') + '</tr>';
+  const mensile = '<div class="card"><div class="card-title">Mese per mese — € e % sulla produzione</div><div style="overflow-x:auto"><table class="me-table">' +
+    '<thead><tr><th>Voce</th>' + mm.map(k => th(mNome(k))).join('') + '</tr></thead><tbody>'+mrows+'</tbody></table></div></div>';
+
+  const grafici = '<div class="two-col">' +
+    '<div class="card"><div class="card-title">Costi mensili per voce</div><div style="position:relative;height:280px"><canvas id="chart-costi-mesi"></canvas></div></div>' +
+    '<div class="card"><div class="card-title">Peso sulla produzione (% incasso del mese)</div><div style="position:relative;height:280px"><canvas id="chart-costi-pct"></canvas></div></div>' +
+    '</div>';
+
+  const nota = '<div style="color:var(--muted);font-size:11px;line-height:1.6;margin-top:4px">' +
+    'Fonte: estratto conto BPER classificato (foglio Spese), aggiornato al '+A.ultimoGiorno.toLocaleDateString('it-IT')+'. ' +
+    'Esclusi anticipi e storni POS, rimborsi ai soci ed entrate. Affitto, assicurazioni e investimenti sono ripartiti sui mesi di competenza. ' +
+    'I costi pagati da altri conti o in contanti (es. parte dei contributi) non sono inclusi. "Previsto BEP" viene dal foglio Costi_BEP.</div>';
+
+  window._costiData = { mesi: mm, grp, A };
+  return sel + avviso + kpi + grafici + tabella + mensile + nota;
+}
+
+
 // ── TAB: BEP ─────────────────────────────────────────────────
 function buildBEP() {
   const raw = DATA.costiBEP;
@@ -3119,6 +3347,33 @@ function renderCharts() {
     }
   }
 
+
+  if (currentTab==='costi' && window._costiData) {
+    const {mesi, grp, A} = window._costiData;
+    const labels = mesi.map(mNome);
+    const vMese = (g,k) => g.cats.reduce((s,c) => s + (A.cat[c][k]||0), 0);
+    const mc = document.getElementById('chart-costi-mesi');
+    if (mc) CHARTS.costiMesi = new Chart(mc, {
+      type:'bar',
+      data:{labels, datasets: grp.map(g => ({label:g.nome, data:mesi.map(k=>vMese(g,k)), backgroundColor:g.col,
+        borderColor:'#ffffff', borderWidth:{top:2,bottom:0,left:0,right:0}, borderSkipped:false}))},
+      options:{responsive:true, maintainAspectRatio:false, interaction:{mode:'index',intersect:false},
+        plugins:{legend:{display:true,position:'bottom',labels:{color:C.muted,font:{size:11},boxWidth:10}},
+          tooltip:{callbacks:{label:c=>c.dataset.label+': '+eur(c.raw), footer:items=>{const t=items.reduce((s,i)=>s+i.raw,0); const r=A.ric[mesi[items[0].dataIndex]]||0; return 'Totale '+eur(t)+(r?' · '+pctTxt(t/r*100)+' della produzione':'');}}}},
+        scales:{x:Object.assign({stacked:true},scaleDefaults.x), y:Object.assign({stacked:true},scaleDefaults.y)}}
+    });
+    const pc = document.getElementById('chart-costi-pct');
+    if (pc) CHARTS.costiPct = new Chart(pc, {
+      type:'line',
+      data:{labels, datasets: grp.map(g => ({label:g.nome, data:mesi.map(k=>{const r=A.ric[k]||0; return r?vMese(g,k)/r*100:null;}),
+        borderColor:g.col, backgroundColor:g.col, borderWidth:2, pointRadius:4, pointHoverRadius:6, tension:0.25, spanGaps:true}))},
+      options:{responsive:true, maintainAspectRatio:false, interaction:{mode:'index',intersect:false},
+        plugins:{legend:{display:true,position:'bottom',labels:{color:C.muted,font:{size:11},boxWidth:10}},
+          tooltip:{callbacks:{label:c=>c.dataset.label+': '+pctTxt(c.raw)}}},
+        scales:{x:scaleDefaults.x, y:{grid:{color:C.grid},ticks:{color:C.muted,font:{size:10},callback:v=>v+'%'},border:{color:C.grid},beginAtZero:true}}}
+    });
+  }
+
   if (currentTab==='obiettivo' && window._objData) {
     const {last12} = window._objData;
     const oc = document.getElementById('chart-obj');
@@ -3315,6 +3570,7 @@ async function refreshData() {
   document.getElementById('last-update').textContent = 'Aggiornamento...';
   await loadData();
   DATA._articoliCaricati = false; // forza reload articoli al prossimo accesso
+  DATA._speseCaricate = false; DATA._bepCaricato = false;
   renderTab();
   if (btn) { btn.style.color = 'var(--sub)'; }
   // Reset timer
