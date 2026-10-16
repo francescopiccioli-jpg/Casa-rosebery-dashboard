@@ -446,7 +446,7 @@ function renderTab() {
   const needsArticoli = ['oggi','articoli','custom','menu'];
   if (currentTab === 'bep' && !DATA._bepCaricato) {
     el.innerHTML = '<div class="state-msg"><div class="spinner"></div><div>Caricamento BEP...</div></div>';
-    fetchSheet('Costi_BEP').then(raw => {
+    fetchSheet('Costi_BEP', 0).then(raw => {
       DATA.costiBEP = raw;
       DATA._bepCaricato = true;
       renderTab();
@@ -455,7 +455,7 @@ function renderTab() {
   }
   if (currentTab === 'costi' && !DATA._speseCaricate) {
     el.innerHTML = '<div class="state-msg"><div class="spinner"></div><div>Caricamento costi...</div></div>';
-    Promise.all([fetchSheet('Spese'), DATA._bepCaricato ? Promise.resolve(DATA.costiBEP) : fetchSheet('Costi_BEP')])
+    Promise.all([fetchSheet('Spese'), DATA._bepCaricato ? Promise.resolve(DATA.costiBEP) : fetchSheet('Costi_BEP', 0)])
       .then(([sp, bep]) => {
         DATA.spese = parseSpese(sp);
         if (!DATA._bepCaricato) { DATA.costiBEP = bep; DATA._bepCaricato = true; }
@@ -3042,7 +3042,7 @@ function buildBEP() {
     for (const r of raw) {
       const keys = Object.keys(r);
       const a = String(r[keys[0]] || '').trim().toLowerCase().replace(/[^a-z0-9]/g, '');
-      const b = num(r['B'] || 0);
+      const b = num(r['B'] !== undefined ? r['B'] : r[keys[1]]);
       if (a.includes(lbl) && b !== 0) return b;
     }
     return 0;
@@ -3487,9 +3487,9 @@ function renderCharts() {
 }
 
 // ── Fetch ─────────────────────────────────────────────────────
-async function fetchSheet(sheetName) {
+async function fetchSheet(sheetName, headers) {
   try {
-    const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(sheetName)}`;
+    const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&sheet=${encodeURIComponent(sheetName)}`+(headers!==undefined?`&headers=${headers}`:'');
     const resp = await fetch(url);
     const text = await resp.text();
     const match = text.match(/google\.visualization\.Query\.setResponse\(([\s\S]*)\)/);
